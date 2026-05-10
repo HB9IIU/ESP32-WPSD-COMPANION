@@ -27,9 +27,6 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 # CONFIG
 # ---------------------------------------------------------------------
 
-MMDVM_CONFIG_FILE = "/etc/mmdvmhost"
-MMDVM_LOG_GLOB = "/var/log/pi-star/MMDVM-*.log"
-
 WS_BIND_HOST = "0.0.0.0"
 WS_BIND_PORT = 8765
 
@@ -47,9 +44,13 @@ HEARD_RECENT_LIMIT = 10
 HEARD_SAVE_INTERVAL_SECONDS = 300
 HEARD_SAVE_CHANGE_THRESHOLD = 25
 
-DMRGATEWAY_CONFIG = "/etc/dmrgateway"
 BM_API_BASE = "https://api.brandmeister.network/v2"
 BM_TG_REFRESH_INTERVAL_SECONDS = 6 * 3600
+
+MMDVM_CONFIG_FILE = "/etc/mmdvmhost"
+MMDVM_LOG_GLOB    = "/var/log/MMDVM/MMDVM-*.log"
+DMRGATEWAY_CONFIG = "/etc/dmrgateway"
+
 
 # ---------------------------------------------------------------------
 # GLOBAL STATE
@@ -181,19 +182,7 @@ def run_command(command_list):
 
 
 def get_service_state():
-    state = run_command(["systemctl", "is-active", "mmdvmhost"])
-    # Pi-Star often manages MMDVMHost outside systemd; if systemctl says
-    # failed/inactive but the process is actually running, report "active".
-    if state not in ("active", "activating"):
-        try:
-            import subprocess
-            result = subprocess.run(["pgrep", "-x", "MMDVMHost"],
-                                    capture_output=True, timeout=3)
-            if result.returncode == 0:
-                state = "active"
-        except Exception:
-            pass
-    return state
+    return run_command(["systemctl", "is-active", "mmdvmhost"])
 
 
 def get_service_main_pid():
@@ -1021,7 +1010,7 @@ def bm_api_get(path):
     try:
         req = urllib.request.Request(
             url,
-            headers={"User-Agent": "ESP32-PI-STAR-CLIENT/1.0", "Accept": "application/json"}
+            headers={"User-Agent": "ESP32-WPSD-CLIENT/1.0", "Accept": "application/json"}
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
             return json.loads(resp.read().decode("utf-8"))
@@ -1152,6 +1141,7 @@ async def monitor_log_forever():
 
     current_log_file = SNAPSHOT_STATE["current_log_file"]
     if not current_log_file:
+        print("ERROR: No MMDVM log file found matching: %s" % MMDVM_LOG_GLOB)
         raise RuntimeError("No MMDVM log file found")
 
     log_handle = open_log_file_at_end(current_log_file)
@@ -1197,6 +1187,7 @@ async def monitor_log_forever():
 
             current_log_file = SNAPSHOT_STATE["current_log_file"]
             if not current_log_file:
+                print("ERROR: No MMDVM log file found after change. Glob: %s" % MMDVM_LOG_GLOB)
                 raise RuntimeError("No MMDVM log file found after change")
 
             log_handle = open_log_file_at_end(current_log_file)
@@ -1210,6 +1201,14 @@ async def monitor_log_forever():
 # ---------------------------------------------------------------------
 
 async def main():
+    print("=" * 60)
+    print("Platform             : WPSD")
+    print("MMDVM config         : %s" % MMDVM_CONFIG_FILE)
+    print("MMDVM log glob       : %s" % MMDVM_LOG_GLOB)
+    print("DMRGateway config    : %s" % DMRGATEWAY_CONFIG)
+    print("WebSocket server     : %s:%d" % (WS_BIND_HOST, WS_BIND_PORT))
+    print("=" * 60)
+
     rebuild_snapshot_state()
     reset_live_state()
     load_heard_callsigns_file()
@@ -1220,7 +1219,6 @@ async def main():
     refresh_bm_static_tgs()
     rebuild_snapshot_state()
 
-    print("WebSocket server running on port %d" % WS_BIND_PORT)
     print("Current log file: %s" % SNAPSHOT_STATE["current_log_file"])
     print("RadioID CSV file: %s" % RADIOID_LOCAL_CSV)
     print("Heard callsigns file: %s" % HEARD_CALLSIGNS_FILE)
