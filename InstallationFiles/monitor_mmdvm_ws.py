@@ -48,7 +48,7 @@ BM_API_BASE = "https://api.brandmeister.network/v2"
 BM_TG_REFRESH_INTERVAL_SECONDS = 6 * 3600
 
 MMDVM_CONFIG_FILE = "/etc/mmdvmhost"
-MMDVM_LOG_GLOB    = "/var/log/MMDVM/MMDVM-*.log"
+MMDVM_LOG_GLOB    = "/var/log/pi-star/MMDVM-*.log"
 DMRGATEWAY_CONFIG = "/etc/dmrgateway"
 
 
@@ -1205,6 +1205,7 @@ async def main():
     print("Platform             : WPSD")
     print("MMDVM config         : %s" % MMDVM_CONFIG_FILE)
     print("MMDVM log glob       : %s" % MMDVM_LOG_GLOB)
+    print("Log file found       : %s" % (find_latest_log_file() or "NOT FOUND"))
     print("DMRGateway config    : %s" % DMRGATEWAY_CONFIG)
     print("WebSocket server     : %s:%d" % (WS_BIND_HOST, WS_BIND_PORT))
     print("=" * 60)
