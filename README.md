@@ -1,13 +1,13 @@
-# ESP32 Pi-Star Companion
+# ESP32 WPSD Companion
 
-A real-time DMR hotspot monitor built on an **ESP32 CYD**  
+A real-time DMR hotspot monitor built on an **ESP32 CYD**
 (Cheap Yellow Display — 320×240 TFT with touchscreen).
 
-It connects via WebSocket to a lightweight Python server running on your **Pi-Star hotspot** and displays live DMR activity, last-heard stations, static talkgroups, and hotspot information — all on a standalone touchscreen device.
+It connects via WebSocket to a lightweight Python server running on your **WPSD hotspot** and displays live DMR activity, last-heard stations, static talkgroups, and hotspot information — all on a standalone touchscreen device.
 
 ---
 
-## 🚀 Features
+## Features
 
 - **Live DMR activity**
   - Callsign, name, country flag, talkgroup, slot, BER, RSSI, duration
@@ -25,11 +25,11 @@ It connects via WebSocket to a lightweight Python server running on your **Pi-St
   - Tap anywhere to cycle through pages
 
 - **Clock synchronization**
-  - Time and UTC offset initialized from Pi-Star
+  - Time and UTC offset initialized from WPSD
 
 ---
 
-## 📺 Display Pages
+## Display Pages
 
 | Page | Description |
 |------|------------|
@@ -40,10 +40,10 @@ It connects via WebSocket to a lightweight Python server running on your **Pi-St
 
 ---
 
-## 🧠 Architecture
+## Architecture
 
-```raw
-Pi-Star (Raspberry Pi)
+```
+WPSD (Raspberry Pi)
   └── monitor_mmdvm_ws.py
         ├── Reads MMDVM logs (live DMR events)
         ├── Parses hotspot configuration
@@ -66,53 +66,53 @@ ESP32 CYD
 
 ---
 
-## 🧰 Hardware
+## Hardware
 
 | Component | Details |
 |----------|--------|
 | ESP32 | ESP32 Dev Module |
 | Display | 2.8" ILI9341 TFT (320×240) |
 | Touch | XPT2046 |
-| Hotspot | Raspberry Pi running Pi-Star |
+| Hotspot | Raspberry Pi running WPSD |
 
-Target device:  
+Target device:
 **ESP32-2432S028 ("Cheap Yellow Display")**
 
-More info:  
+More info:
 https://randomnerdtutorials.com/cheap-yellow-display-esp32-2432s028r/
 
 ---
 
-## ⚙️ Installation
+## Installation
 
 ### 1. Flash the ESP32
 
-- Use **PlatformIO (VS Code)**  
-  or  
-- Use the web flasher:  
+- Use **PlatformIO (VS Code)**
+  or
+- Use the web flasher:
   👉 https://esp32projects.myshack.ch/
 
 ---
 
-### 2. Install the Pi-Star WebSocket server
+### 2. Install the WPSD WebSocket server
 
-SSH into your Pi-Star and run the installer (handles everything: dependencies, firewall, systemd service):
+SSH into your WPSD device and run the installer (handles everything: dependencies, firewall, avahi mDNS alias, systemd service):
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/HB9IIU/ESP32-WSPD-COMPANION/main/InstallationFiles/install_all.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/InstallationFiles/install_all.sh)
 ```
 
-**Updating an existing installation** (script only, service already installed):
+**Updating an existing installation** (script only, no reinstall needed):
 
 ```bash
-sudo wget -O /home/pi-star/monitor_mmdvm_ws.py \
-https://raw.githubusercontent.com/HB9IIU/ESP32-WSPD-COMPANION/main/InstallationFiles/monitor_mmdvm_ws.py \
-&& sudo systemctl restart monitor_mmdvm_ws
+sudo curl -fsSL https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/InstallationFiles/monitor_mmdvm_ws.py \
+  -o /home/wpsd/monitor_mmdvm_ws.py \
+  && sudo systemctl restart monitor_mmdvm_ws
 ```
 
 ---
 
-## 📦 Dependencies
+## Dependencies
 
 ### ESP32 firmware
 
@@ -124,14 +124,14 @@ https://raw.githubusercontent.com/HB9IIU/ESP32-WSPD-COMPANION/main/InstallationF
 
 ---
 
-### Pi-Star server
+### WPSD server
 
 - Python 3.9+
 - `websockets==13.1`
 
 ---
 
-## 🔧 Service Management (Pi-Star)
+## Service Management
 
 ```bash
 sudo systemctl status monitor_mmdvm_ws
@@ -141,13 +141,12 @@ sudo journalctl -u monitor_mmdvm_ws -f
 
 ---
 
-## 📄 License
+## License
 
 MIT License
 
 ---
 
-## 📡 Author
+## Author
 
 HB9IIU
-
