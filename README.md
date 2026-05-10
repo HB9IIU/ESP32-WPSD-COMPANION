@@ -106,7 +106,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/
 
 ```bash
 sudo curl -fsSL https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/InstallationFiles/monitor_mmdvm_ws.py \
-  -o /home/wpsd/monitor_mmdvm_ws.py \
+  -o /home/pi-star/monitor_mmdvm_ws.py \
   && sudo systemctl restart monitor_mmdvm_ws
 ```
 

@@ -18,7 +18,7 @@ set -euo pipefail
 # =========================================================
 
 GITHUB_RAW="https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/InstallationFiles"
-PY_SCRIPT="/home/wpsd/monitor_mmdvm_ws.py"
+PY_SCRIPT="/home/pi-star/monitor_mmdvm_ws.py"
 SERVICE_NAME="monitor_mmdvm_ws.service"
 WS_PORT="8765"
 PINNED_WEBSOCKETS_VERSION="13.1"
@@ -110,9 +110,9 @@ if [ "${CURRENT_WS_VERSION}" = "${PINNED_WEBSOCKETS_VERSION}" ]; then
 else
     if [ -n "${CURRENT_WS_VERSION}" ]; then
         info "removing incompatible websockets version: ${CURRENT_WS_VERSION}"
-        sudo python3 -m pip uninstall -y websockets >/dev/null 2>&1 || true
+        sudo python3 -m pip uninstall -y --break-system-packages websockets >/dev/null 2>&1 || true
     fi
-    sudo python3 -m pip install --no-cache-dir "websockets==${PINNED_WEBSOCKETS_VERSION}" \
+    sudo python3 -m pip install --no-cache-dir --break-system-packages "websockets==${PINNED_WEBSOCKETS_VERSION}" \
         || die "failed to install websockets ${PINNED_WEBSOCKETS_VERSION}"
     ok "websockets ${PINNED_WEBSOCKETS_VERSION} installed"
 fi
