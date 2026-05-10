@@ -1,0 +1,136 @@
+We have an ESP32 TFT dashboard that currently works with Pi-Star through a custom Python WebSocket bridge named monitor_mmdvm_ws.py.
+
+The ESP32 firmware must NOT be changed for now.
+
+Current architecture:
+
+Pi-Star / MMDVMHost
+  -> monitor_mmdvm_ws.py
+  -> WebSocket server on port 8765
+  -> ESP32 TFT display
+
+The ESP32 expects the same JSON message types:
+- "snapshot"
+- "live"
+- "heard_summary"
+
+The Python bridge currently assumes Pi-Star paths:
+
+MMDVM_CONFIG_FILE = "/etc/mmdvmhost"
+MMDVM_LOG_GLOB = "/var/log/pi-star/MMDVM-*.log"
+DMRGATEWAY_CONFIG = "/etc/dmrgateway"
+
+Goal:
+Make monitor_mmdvm_ws.py compatible with both Pi-Star and WPSD, while preserving exactly the same WebSocket JSON output so the ESP32 firmware keeps working unchanged.
+
+Important:
+WPSD also uses MMDVMHost, and available documentation/examples still show /etc/mmdvmhost and /var/log/pi-star as commonly used paths, but this must be detected robustly, not hardcoded.
+
+Please modify the Python bridge as follows:
+
+1. Add an automatic platform/path detection layer.
+
+Create a function such as detect_mmdvm_environment() that determines:
+- config file path
+- MMDVM log glob/path
+- DMRGateway config path
+- detected platform name: "pi-star", "wpsd", or "custom"
+
+2. Do not assume only one log directory.
+
+Search candidate log locations, for example:
+- /var/log/pi-star/MMDVM-*.log
+- /var/log/MMDVM/MMDVM-*.log
+- /var/log/MMDVM-*.log
+
+Pick the newest existing MMDVM log file.
+
+3. Do not assume only one config path.
+
+Search candidate config files, for example:
+- /etc/mmdvmhost
+- /etc/MMDVM.ini
+- /opt/MMDVMHost/MMDVM.ini
+
+Pick the first readable file, but prefer /etc/mmdvmhost if it exists.
+
+4. Do the same for DMRGateway config.
+
+Search:
+- /etc/dmrgateway
+- /etc/DMRGateway.ini
+- /opt/DMRGateway/DMRGateway.ini
+
+If no DMRGateway config exists, continue running but leave hotspot_dmr_id empty and skip BrandMeister static TG lookup.
+
+5. Keep backward compatibility.
+
+The existing constants may remain as defaults, but actual runtime code should use detected paths.
+
+For example, replace direct use of:
+MMDVM_CONFIG_FILE
+MMDVM_LOG_GLOB
+DMRGATEWAY_CONFIG
+
+with runtime variables such as:
+ACTIVE_MMDVM_CONFIG_FILE
+ACTIVE_MMDVM_LOG_GLOB
+ACTIVE_DMRGATEWAY_CONFIG
+
+or a small ENV dictionary.
+
+6. Add useful startup logging.
+
+At startup, print:
+- detected platform
+- selected MMDVM config file
+- selected MMDVM log file / glob
+- selected DMRGateway config file
+- WebSocket bind address and port
+
+Example:
+
+Detected environment: WPSD
+MMDVM config: /etc/mmdvmhost
+MMDVM logs: /var/log/pi-star/MMDVM-*.log
+DMRGateway config: /etc/dmrgateway
+WebSocket server: 0.0.0.0:8765
+
+7. Do not break the existing parser.
+
+The existing regex parsing for MMDVM log lines should remain unchanged unless required.
+The goal is first to make the bridge find the correct files under WPSD.
+
+8. Add a fallback diagnostic mode.
+
+If no MMDVM log file is found, do not crash immediately without context.
+Print all checked log patterns and whether files were found.
+Then raise a clear RuntimeError.
+
+9. Optional but useful:
+Allow environment variables to override paths:
+
+MMDVM_CONFIG_FILE
+MMDVM_LOG_GLOB
+DMRGATEWAY_CONFIG
+
+This lets the user force paths manually if WPSD uses a slightly different layout.
+
+10. Preserve the WebSocket protocol exactly.
+
+Do not rename JSON fields.
+Do not change:
+- snapshot
+- live
+- heard_summary
+- station_callsign
+- hotspot_dmr_id
+- static_talkgroups
+- rssi_values_dbm
+- ber_percent
+- packet_loss_percent
+
+The ESP32 client depends on this format.
+
+Expected result:
+The same Python bridge should run on Pi-Star and WPSD. The ESP32 TFT dashboard should connect to port 8765 exactly as before and receive the same JSON format.
