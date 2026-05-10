@@ -99,14 +99,14 @@ https://randomnerdtutorials.com/cheap-yellow-display-esp32-2432s028r/
 SSH into your Pi-Star and run the installer (handles everything: dependencies, firewall, systemd service):
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/HB9IIU/ESP32-PI-STAR-COMPANION/main/InstallationFiles/install_all.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/HB9IIU/ESP32-WSPD-COMPANION/main/InstallationFiles/install_all.sh)
 ```
 
 **Updating an existing installation** (script only, service already installed):
 
 ```bash
 sudo wget -O /home/pi-star/monitor_mmdvm_ws.py \
-https://raw.githubusercontent.com/HB9IIU/ESP32-PI-STAR-COMPANION/main/InstallationFiles/monitor_mmdvm_ws.py \
+https://raw.githubusercontent.com/HB9IIU/ESP32-WSPD-COMPANION/main/InstallationFiles/monitor_mmdvm_ws.py \
 && sudo systemctl restart monitor_mmdvm_ws
 ```
 
