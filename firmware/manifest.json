@@ -1,9 +1,9 @@
 {
-  "build_number": 11,
-  "version": "11",
-  "build_time": "2026-05-11T20:46:18.771208+00:00",
+  "build_number": 12,
+  "version": "12",
+  "build_time": "2026-05-11T20:47:42.726476+00:00",
   "firmware": "firmware.bin",
   "size": 4128768,
-  "sha256": "5c8c0825c4333501dd5b6001437dd0e67d56707170aa575cee7e1fb09e4b769e",
+  "sha256": "3ad08cfe1ceccd448c1936688bbd7b0658a2bdf8864d5a2b829ea656b48ef4ba",
   "url": "https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/firmware/firmware.bin"
 }
