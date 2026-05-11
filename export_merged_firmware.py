@@ -249,7 +249,6 @@ def create_manifest(project_dir: Path, output_dir: Path) -> None:
 
     manifest = {
         "build_number": build_number,
-        "version": str(build_number),
         "build_time": now_utc.isoformat(),
         "firmware": "firmware.bin",
         "size": firmware_file.stat().st_size,

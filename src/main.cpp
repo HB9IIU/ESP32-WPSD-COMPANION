@@ -10,7 +10,6 @@
 #include <time.h>
 #include <sys/time.h>
 #include <stdio.h>
-#include <mbedtls/base64.h>
 #include "HB9IIUportalBasic.h"
 #include "build_number.h"
 #define WS_PORT 8765
@@ -33,7 +32,7 @@ constexpr uint32_t WS_RECOVERY_INTERVAL_MS = 5000;
 constexpr uint32_t WIFI_RECOVERY_INTERVAL_MS = 10000;
 constexpr uint32_t UPDATE_CHECK_TIMEOUT_MS = 8000;
 constexpr uint32_t UPDATE_NOTICE_DISPLAY_MS = 4500;
-const char *kFirmwareManifestUrl = "https://api.github.com/repos/HB9IIU/ESP32-WPSD-COMPANION/contents/firmware/manifest.json?ref=main";
+const char *kFirmwareManifestUrl = "https://github.com/HB9IIU/ESP32-WPSD-COMPANION/raw/refs/heads/main/firmware/manifest.json";
 
 struct SnapshotState
 {
@@ -1014,50 +1013,6 @@ void displaySplashScreen()
     TJpgDec.drawFsJpg(0, 0, "/splash_screen.jpg", SPIFFS);
 }
 
-bool decodeBase64ToString(const char *encodedText, String &decodedText)
-{
-    decodedText = "";
-
-    if (encodedText == nullptr || encodedText[0] == '\0')
-    {
-        return false;
-    }
-
-    String cleanedText = encodedText;
-    cleanedText.replace("\n", "");
-    cleanedText.replace("\r", "");
-    cleanedText.replace(" ", "");
-
-    const size_t outputCapacity = ((cleanedText.length() + 3) / 4) * 3 + 1;
-    unsigned char *output = new unsigned char[outputCapacity];
-
-    if (output == nullptr)
-    {
-        Serial.println("[Update] Base64 decode allocation failed");
-        return false;
-    }
-
-    size_t outputLength = 0;
-    const int result = mbedtls_base64_decode(
-        output,
-        outputCapacity,
-        &outputLength,
-        reinterpret_cast<const unsigned char *>(cleanedText.c_str()),
-        cleanedText.length());
-
-    if (result != 0)
-    {
-        Serial.printf("[Update] Base64 decode failed: %d\n", result);
-        delete[] output;
-        return false;
-    }
-
-    output[outputLength] = '\0';
-    decodedText = reinterpret_cast<const char *>(output);
-    delete[] output;
-    return true;
-}
-
 bool fetchRemoteFirmwareBuildNumber(uint32_t &remoteBuildNumber)
 {
     remoteBuildNumber = 0;
@@ -1075,7 +1030,7 @@ bool fetchRemoteFirmwareBuildNumber(uint32_t &remoteBuildNumber)
     http.setTimeout(UPDATE_CHECK_TIMEOUT_MS);
 
     String manifestUrl = kFirmwareManifestUrl;
-    manifestUrl += "&check=";
+    manifestUrl += "?check=";
     manifestUrl += String(millis());
 
     if (!http.begin(client, manifestUrl))
@@ -1086,8 +1041,6 @@ bool fetchRemoteFirmwareBuildNumber(uint32_t &remoteBuildNumber)
 
     http.addHeader("Cache-Control", "no-cache");
     http.addHeader("Pragma", "no-cache");
-    http.addHeader("User-Agent", "ESP32-WPSD-COMPANION");
-    http.addHeader("Accept", "application/vnd.github+json");
 
     const int httpCode = http.GET();
 
@@ -1101,25 +1054,8 @@ bool fetchRemoteFirmwareBuildNumber(uint32_t &remoteBuildNumber)
     const String payload = http.getString();
     http.end();
 
-    JsonDocument apiDoc;
-    DeserializationError error = deserializeJson(apiDoc, payload);
-
-    if (error)
-    {
-        Serial.printf("[Update] GitHub API JSON error: %s\n", error.c_str());
-        return false;
-    }
-
-    String manifestPayload;
-
-    if (!decodeBase64ToString(apiDoc["content"] | "", manifestPayload))
-    {
-        Serial.println("[Update] GitHub API response missing manifest content");
-        return false;
-    }
-
-    JsonDocument manifestDoc;
-    error = deserializeJson(manifestDoc, manifestPayload);
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, payload);
 
     if (error)
     {
@@ -1127,7 +1063,7 @@ bool fetchRemoteFirmwareBuildNumber(uint32_t &remoteBuildNumber)
         return false;
     }
 
-    const uint32_t parsedBuildNumber = manifestDoc["build_number"] | 0;
+    const uint32_t parsedBuildNumber = doc["build_number"] | 0;
 
     if (parsedBuildNumber == 0)
     {
