@@ -15,7 +15,7 @@
 // Set to true to skip NVS + mDNS steps and force the network scan (for testing)
 constexpr bool kSkipFastDiscovery = false;
 
-// Resolved Pi-Star host — set at boot by discoverPiStar()
+// Resolved WPSD host — set at boot by discoverWPSD()
 static char g_wsHost[40] = "";
 
 // Globals
@@ -356,7 +356,7 @@ bool isEmptyTalkerAliasEvent()
 
 void printSnapshot(JsonVariantConst configVariant)
 {
-    printDivider("PI-STAR SNAPSHOT");
+    printDivider("WPSD SNAPSHOT");
     Serial.printf("Type              : %s\n", g_snapshot.type);
     Serial.printf("Server Time Unix  : %s", g_snapshot.server_time_valid ? "" : "n/a");
     if (g_snapshot.server_time_valid)
@@ -450,7 +450,7 @@ void printLive()
         return;
     }
 
-    printDivider("PI-STAR LIVE EVENT");
+    printDivider("WPSD LIVE EVENT");
     Serial.printf("Type              : %s\n", g_live.type);
     Serial.printf("Event ID          : %d\n", g_live.event_id);
     Serial.printf("Timestamp         : %s\n", g_live.timestamp);
@@ -916,7 +916,7 @@ void onWsEvent(WStype_t type, uint8_t *payload, size_t length)
         {
             // Persist the working IP so next boot can try it first
             Preferences prefs;
-            if (prefs.begin("pistar", false))
+            if (prefs.begin("wpsd", false))
             {
                 prefs.putString("ip", g_wsHost);
                 prefs.end();
@@ -2633,7 +2633,7 @@ void drawOfflinePage()
     tft.setTextDatum(TL_DATUM);
 }
 
-// ---- Pi-Star Discovery ----
+// ---- WPSD Discovery ----
 
 // Step indices
 constexpr int kDiscStepNvs   = 0;
@@ -2657,7 +2657,7 @@ static void drawDiscoveryScreen()
     tft.setFreeFont(&UbuntuMonoBold18px7b);
     tft.setTextDatum(TC_DATUM);
     tft.setTextColor(TFT_CYAN, TFT_BLACK);
-    tft.drawString("PI-STAR DISCOVERY", tft.width() / 2, 8);
+    tft.drawString("WPSD DISCOVERY", tft.width() / 2, 8);
     tft.drawFastHLine(0, 32, tft.width(), tft.color565(0, 80, 80));
 
     // Row positions
@@ -2669,7 +2669,7 @@ static void drawDiscoveryScreen()
     // Step labels
     const char *labels[4] = {
         "Last known IP",
-        "mDNS pi-star.local",
+        "mDNS wpsd.local",
         "Network scan",
         "Not found — retry"
     };
@@ -2721,7 +2721,7 @@ static bool probeHost(const char *ip, uint16_t timeoutMs = 300)
     return ok;
 }
 
-bool discoverPiStar()
+bool discoverWPSD()
 {
     drawDiscoveryScreen();
 
@@ -2731,7 +2731,7 @@ bool discoverPiStar()
         updateDiscoveryStep(kDiscStepNvs, "trying...", kDiscColorTrying);
         Preferences prefs;
         String savedIp = "";
-        if (prefs.begin("pistar", true))
+        if (prefs.begin("wpsd", true))
         {
             savedIp = prefs.getString("ip", "");
             prefs.end();
@@ -2762,12 +2762,12 @@ bool discoverPiStar()
         updateDiscoveryStep(kDiscStepNvs, "skipped", kDiscColorSkipped, "(test mode)");
     }
 
-    // ── Step 2: mDNS pi-star.local ──────────────────────────────────
+    // ── Step 2: mDNS wpsd.local ─────────────────────────────────────
     if (!kSkipFastDiscovery)
     {
         updateDiscoveryStep(kDiscStepMdns, "trying...", kDiscColorTrying);
-        MDNS.begin("esp32-pistar");
-        IPAddress mdnsIP = MDNS.queryHost("pi-star", 3000);
+        MDNS.begin("esp32-wpsd");
+        IPAddress mdnsIP = MDNS.queryHost("wpsd", 3000);
         if (mdnsIP != INADDR_NONE && (uint32_t)mdnsIP != 0)
         {
             strlcpy(g_wsHost, mdnsIP.toString().c_str(), sizeof(g_wsHost));
@@ -2962,7 +2962,7 @@ void setup()
     //   - Connected             → proceed
     while (true)
     {
-        HB9IIUPortal::begin("esp32-pistar");
+        HB9IIUPortal::begin("esp32-wpsd");
 
         if (HB9IIUPortal::isConnected())
             break; // success
@@ -2999,8 +2999,8 @@ void setup()
     updateFooterStatusTextDisplay(wifiStatusText, wifiStatusColor);
     Serial.printf("\nConnected! IP: %s\n", WiFi.localIP().toString().c_str());
 
-    while (!discoverPiStar()); // retries until Pi-Star is found
-    Serial.printf("[Discovery] Using Pi-Star host: %s\n", g_wsHost);
+    while (!discoverWPSD()); // retries until WPSD host is found
+    Serial.printf("[Discovery] Using WPSD host: %s\n", g_wsHost);
 
     primeArp();
 

@@ -17,13 +17,7 @@ SERVICE_NAME="monitor_mmdvm_ws.service"
 WS_PORT="8765"
 PINNED_WEBSOCKETS_VERSION="13.1"
 
-# The ESP32 firmware discovers the server via mDNS querying "pi-star.local".
-# We register that name as an avahi alias so discovery works regardless of
-# whatever hostname this WPSD device is currently set to.
-AVAHI_ALIAS="pi-star"
-AVAHI_CONF="/etc/avahi/avahi-daemon.conf"
-
-TOTAL_STEPS=8
+TOTAL_STEPS=7
 
 # =========================================================
 # HELPERS
@@ -135,7 +129,7 @@ if pgrep -f "python3 ${PY_SCRIPT}" >/dev/null 2>&1; then
 fi
 
 # =========================================================
-# [6/8] Open firewall port for WebSocket
+# [6/7] Open firewall port for WebSocket
 # =========================================================
 step 6 "Opening firewall port ${WS_PORT}..."
 
@@ -156,39 +150,9 @@ else
 fi
 
 # =========================================================
-# [7/8] Register pi-star.local avahi alias
+# [7/7] Install and start systemd service
 # =========================================================
-step 7 "Registering ${AVAHI_ALIAS}.local mDNS alias..."
-
-# The ESP32 firmware queries mDNS for "pi-star.local" to discover this server.
-# We add it as a hostname alias in avahi so the ESP32 finds us regardless of
-# whatever hostname this device has been given.
-
-if [ ! -f "${AVAHI_CONF}" ]; then
-    warn "${AVAHI_CONF} not found — skipping avahi alias (ESP32 mDNS discovery will fall back to network scan)"
-else
-    # Check if host-name-aliases already contains our alias
-    if grep -qE "^host-name-aliases\s*=.*\b${AVAHI_ALIAS}\b" "${AVAHI_CONF}" 2>/dev/null; then
-        ok "${AVAHI_ALIAS}.local alias already present in avahi config"
-    else
-        # If there's already a host-name-aliases line, append to it; otherwise add new line
-        if grep -qE "^host-name-aliases\s*=" "${AVAHI_CONF}"; then
-            sudo sed -i -E "s/^(host-name-aliases\s*=.*)/\1,${AVAHI_ALIAS}/" "${AVAHI_CONF}"
-            ok "appended ${AVAHI_ALIAS} to existing host-name-aliases"
-        else
-            # Insert after [server] section header
-            sudo sed -i "/^\[server\]/a host-name-aliases=${AVAHI_ALIAS}" "${AVAHI_CONF}"
-            ok "added host-name-aliases=${AVAHI_ALIAS} under [server] in avahi config"
-        fi
-        sudo systemctl restart avahi-daemon || warn "could not restart avahi-daemon"
-        ok "avahi-daemon restarted"
-    fi
-fi
-
-# =========================================================
-# [8/8] Install and start systemd service
-# =========================================================
-step 8 "Installing systemd service..."
+step 7 "Installing systemd service..."
 
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}"
 
@@ -242,12 +206,6 @@ else
     warn "port ${WS_PORT} is not yet listening (service may still be starting)"
 fi
 
-if [ -f "${AVAHI_CONF}" ] && grep -qE "\b${AVAHI_ALIAS}\b" "${AVAHI_CONF}"; then
-    ok "${AVAHI_ALIAS}.local mDNS alias is configured"
-else
-    warn "${AVAHI_ALIAS}.local mDNS alias is NOT configured"
-fi
-
 echo
 echo "========================================================="
 echo " Installation complete"
@@ -257,7 +215,7 @@ echo " websockets : ${WS_VER}"
 echo " Script     : ${PY_SCRIPT}"
 echo " Service    : ${SERVICE_NAME}"
 echo " Port       : ${WS_PORT}"
-echo " mDNS alias : ${AVAHI_ALIAS}.local  (-> $(hostname).local)"
+echo " WPSD host  : $(hostname).local"
 echo
 echo " Useful commands:"
 echo "   sudo systemctl status ${SERVICE_NAME} --no-pager"
