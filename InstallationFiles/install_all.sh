@@ -14,9 +14,9 @@ cat << 'EOF'
 ║   ╚███╔███╔╝██║     ███████║██████╔╝    ╚██████╗╚██████╔╝██║ ╚═╝ ██║ ║
 ║    ╚══╝╚══╝ ╚═╝     ╚══════╝╚═════╝      ╚═════╝ ╚═════╝ ╚═╝     ╚═╝ ║
 ║                                                                      ║
-║                 ESP32 CYD HOTSPOT COMPANION                         ║
+║                 ESP32 CYD HOTSPOT COMPANION                          ║
 ║                                                                      ║
-║                    CONNECT • MONITOR • DISPLAY                      ║
+║                    CONNECT • MONITOR • DISPLAY                       ║
 ║                                                                      ║
 ║  ┌──────────────────────────────────────────────────────────────┐    ║
 ║  │                                                              │    ║
@@ -26,10 +26,10 @@ cat << 'EOF'
 ║  │    ├─ reads: /etc/mmdvmhost                                  │    ║
 ║  │    │                                                         │    ║
 ║  │    └─ monitor_mmdvm_ws.py  (WebSocket :8765)                 │    ║
-║  │                                │                              │    ║
-║  │                                ▼                              │    ║
-║  │                         ESP32 CYD TFT                         │    ║
-║  │                         LIVE REMOTE DISPLAY                   │    ║
+║  │                                │                             │    ║
+║  │                                ▼                             │    ║
+║  │                         ESP32 CYD TFT                        │    ║
+║  │                         LIVE REMOTE DISPLAY                  │    ║
 ║  │                                                              │    ║
 ║  └──────────────────────────────────────────────────────────────┘    ║
 ║                                                                      ║
