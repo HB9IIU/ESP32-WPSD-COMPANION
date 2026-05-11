@@ -291,7 +291,7 @@ namespace HB9IIUPortal
         // AP + STA so we CAN scan networks
         WiFi.mode(WIFI_AP_STA);
         WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-        WiFi.softAP("PiStar-Setup");
+        WiFi.softAP("WPSD-Setup");
 
         Serial.print("📶 [HB9IIUPortal] AP IP Address: ");
         Serial.println(WiFi.softAPIP());
@@ -302,12 +302,12 @@ namespace HB9IIUPortal
         tft.setTextColor(TFT_WHITE, TFT_BLACK);
         tft.setTextDatum(MC_DATUM);
         tft.setTextFont(2);
-        tft.drawString("PiStar-Setup Wi-Fi", tft.width() / 2, 20);
+        tft.drawString("WPSD-Setup Wi-Fi", tft.width() / 2, 20);
         tft.drawString("Scan QR to connect", tft.width() / 2, 40);
 
         // Build Wi-Fi QR payload for OPEN AP:
-        //   WIFI:T:nopass;S:PiStar-Setup;;
-        String qrPayload = "WIFI:T:nopass;S:PiStar-Setup;;";
+        //   WIFI:T:nopass;S:WPSD-Setup;;
+        String qrPayload = "WIFI:T:nopass;S:WPSD-Setup;;";
 
         Serial.print("📱 [HB9IIUPortal] QR payload: ");
         Serial.println(qrPayload);
@@ -345,7 +345,7 @@ namespace HB9IIUPortal
         server.on("/save", HTTP_POST, handleSaveCaptivePortal);
 
         server.begin();
-        Serial.println("✅ [HB9IIUPortal] Web server started. Connect to 'PiStar-Setup' Wi-Fi.");
+        Serial.println("✅ [HB9IIUPortal] Web server started. Connect to 'WPSD-Setup' Wi-Fi.");
  
     }
 

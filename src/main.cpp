@@ -2890,7 +2890,7 @@ bool discoverWPSD()
         updateDiscoveryStep(kDiscStepFallback, msg, kDiscColorFail);
         delay(1000);
     }
-    return false; // caller loops back into discoverPiStar()
+    return false; // caller loops back into discoverWPSD()
 }
 
 // Setup / loop
