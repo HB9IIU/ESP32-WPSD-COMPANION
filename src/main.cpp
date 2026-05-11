@@ -1032,7 +1032,10 @@ bool fetchRemoteFirmwareBuildNumber(uint32_t &remoteBuildNumber)
 
     String manifestUrl = kFirmwareManifestUrl;
     manifestUrl += "?check=";
-    manifestUrl += String(millis());
+    manifestUrl += String(FIRMWARE_BUILD_NUMBER);
+    manifestUrl += "-";
+    manifestUrl += String(micros());
+    Serial.printf("[Update] Manifest URL: %s\n", manifestUrl.c_str());
 
     if (!http.begin(client, manifestUrl))
     {
@@ -1044,6 +1047,7 @@ bool fetchRemoteFirmwareBuildNumber(uint32_t &remoteBuildNumber)
     http.addHeader("Pragma", "no-cache");
 
     const int httpCode = http.GET();
+    Serial.printf("[Update] Manifest HTTP code: %d\n", httpCode);
 
     if (httpCode != HTTP_CODE_OK)
     {
@@ -1054,6 +1058,7 @@ bool fetchRemoteFirmwareBuildNumber(uint32_t &remoteBuildNumber)
 
     const String payload = http.getString();
     http.end();
+    Serial.printf("[Update] Manifest payload: %s\n", payload.c_str());
 
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, payload);
