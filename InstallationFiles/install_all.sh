@@ -53,7 +53,6 @@ if [ -f /etc/os-release ]; then
 fi
 
 ok "Hostname: $(hostname)"
-ok "mDNS alias to register: ${AVAHI_ALIAS}.local"
 ok "Target script: ${PY_SCRIPT}"
 ok "Service: ${SERVICE_NAME}"
 ok "WebSocket port: ${WS_PORT}"
