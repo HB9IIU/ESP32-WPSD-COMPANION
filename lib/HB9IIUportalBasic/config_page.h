@@ -42,10 +42,15 @@ const char index_html[] PROGMEM = R"rawliteral(
     <h2>WiFi Setup</h2>
 </div>
 <form action=/save method=POST>
-    <label for=ssid>Select Network:</label>
-    <select id=ssid name=ssid>
+    <label for=ssid-select>Select Network:</label>
+    <select id=ssid-select>
         <option disabled selected>Scanning...</option>
     </select>
+
+    <label for=ssid-manual style="margin-top:10px;display:block">Or type network name manually:</label>
+    <input id=ssid-manual type=text placeholder="Leave empty to use selection above" autocomplete=off autocorrect=off autocapitalize=none spellcheck=false>
+
+    <input type=hidden name=ssid id=ssid>
 
     <label for=password>Password:</label>
     <div class=password-row>
@@ -69,9 +74,9 @@ const char index_html[] PROGMEM = R"rawliteral(
 </form>
 
 <script>
-    // Load WiFi networks
+    // Load WiFi networks into dropdown
     fetch("/scan").then(res=>res.json()).then(data=>{
-        const s=document.getElementById("ssid");
+        const s=document.getElementById("ssid-select");
         s.innerHTML="";
         data.forEach(n=>{
             const o=document.createElement("option");
@@ -79,7 +84,7 @@ const char index_html[] PROGMEM = R"rawliteral(
             s.add(o);
         });
     }).catch(()=>{
-        document.getElementById("ssid").innerHTML="<option>Error loading networks</option>";
+        document.getElementById("ssid-select").innerHTML="<option>Error loading networks</option>";
     });
 </script>
 
@@ -99,14 +104,17 @@ const char index_html[] PROGMEM = R"rawliteral(
         });
     }
 
-    // blinking button only
+    // On submit: populate hidden ssid from manual field (if filled) or dropdown
     const form=document.querySelector('form');
     const saveBtn=document.querySelector('button[type="submit"]');
     if(form&&saveBtn){
         form.addEventListener('submit',function(e){
+            const manual=document.getElementById('ssid-manual').value.trim();
+            const select=document.getElementById('ssid-select');
+            document.getElementById('ssid').value=manual||(select.value||'');
             saveBtn.disabled=true;
             saveBtn.textContent='Checking....';
-            saveBtn.classList.add('checking'); // start blinking
+            saveBtn.classList.add('checking');
         });
     }
 </script>
