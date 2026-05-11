@@ -2653,12 +2653,14 @@ static void drawDiscoveryScreen()
 {
     tft.fillScreen(TFT_BLACK);
 
-    // Title
+    // Header — same style as all other pages
+    const uint16_t bannerColor = tft.color565(8, 24, 72);
+    tft.fillRect(0, 0, tft.width(), 32, bannerColor);
+    tft.drawFastHLine(0, 31, tft.width(), TFT_CYAN);
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(TFT_WHITE, bannerColor);
     tft.setFreeFont(&UbuntuMonoBold18px7b);
-    tft.setTextDatum(TC_DATUM);
-    tft.setTextColor(TFT_CYAN, TFT_BLACK);
-    tft.drawString("WPSD DISCOVERY", tft.width() / 2, 8);
-    tft.drawFastHLine(0, 32, tft.width(), tft.color565(0, 80, 80));
+    tft.drawString("WPSD DISCOVERY", 8, 5);
 
     // Row positions
     kDiscRowY[kDiscStepNvs]      = 48;

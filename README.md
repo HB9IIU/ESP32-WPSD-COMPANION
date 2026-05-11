@@ -7,42 +7,64 @@ It connects via WebSocket to a lightweight Python server running on your **WPSD 
 
 ---
 
-## Features
+# Features
 
-- **Live DMR activity**
-  - Callsign, name, country flag, talkgroup, slot, BER, RSSI, duration
+- Live DMR activity
+  - Callsign
+  - Name
+  - Country flag
+  - Talkgroup
+  - Slot
+  - BER
+  - RSSI
+  - Duration
 
-- **Last heard list**
+- Last heard list
   - Scrollable list with callsign, name, talkgroup and local time
 
-- **Static talkgroups**
+- Static talkgroups
   - Automatically fetched from BrandMeister API (with names)
 
-- **Hotspot information page**
-  - Operator, QTH, RX/TX frequencies, colour code, power, network, service status
+- Hotspot information page
+  - Operator
+  - QTH
+  - RX frequency
+  - TX frequency
+  - Colour code
+  - Service status
 
-- **Touch navigation**
-  - Tap anywhere to cycle through pages
+- Touch navigation
+  - Tap screen to cycle through pages
+  - Static TG page supports scrolling
 
-- **Clock synchronization**
+- Automatic hotspot discovery
+  - Saved IP address
+  - mDNS (`wpsd.local`)
+  - Automatic LAN scan fallback
+
+- Captive portal Wi-Fi setup
+  - Automatic Wi-Fi configuration portal
+  - Credentials saved in flash memory
+
+- Clock synchronization
   - Time and UTC offset initialized from WPSD
 
 ---
 
-## Display Pages
+# Display Pages
 
 | Page | Description |
-|------|------------|
-| **0 — Live** | Real-time QSO details + recent activity |
-| **1 — Last Heard** | Last 10 stations |
-| **2 — Static TGs** | Configured talkgroups with names |
-| **3 — Hotspot Info** | Device and network configuration |
+|------|-------------|
+| 0 — Live | Real-time QSO details + recent activity |
+| 1 — Last Heard | Last 10 stations |
+| 2 — Static TGs | Configured talkgroups with names |
+| 3 — Hotspot Info | Device and network configuration |
 
 ---
 
-## Architecture
+# Architecture
 
-```
+```text
 WPSD (Raspberry Pi)
   └── monitor_mmdvm_ws.py
         ├── Reads MMDVM logs (live DMR events)
@@ -55,54 +77,222 @@ ESP32 CYD
   └── Firmware (PlatformIO)
         ├── Connects to WebSocket server
         ├── Parses JSON messages
+        ├── Auto-discovers hotspot
         └── Renders UI on TFT display
 ```
 
-### JSON message types
+---
 
-- `snapshot` → configuration + static data (on connect / change)
-- `live` → real-time DMR activity
-- `heard_summary` → last heard stations
+# JSON Message Types
+
+- `snapshot`
+  - Configuration + static data
+
+- `live`
+  - Real-time DMR activity
+
+- `heard_summary`
+  - Last heard stations
 
 ---
 
-## Hardware
+# Hardware
 
 | Component | Details |
-|----------|--------|
+|----------|---------|
 | ESP32 | ESP32 Dev Module |
 | Display | 2.8" ILI9341 TFT (320×240) |
 | Touch | XPT2046 |
 | Hotspot | Raspberry Pi running WPSD |
 
 Target device:
-**ESP32-2432S028 ("Cheap Yellow Display")**
 
-More info:
+**ESP32-2432S028**
+("Cheap Yellow Display")
+
+More information:
+
 https://randomnerdtutorials.com/cheap-yellow-display-esp32-2432s028r/
 
 ---
 
-## Installation
+# Required Filesystem Assets
 
-### 1. Flash the ESP32
+The firmware expects image assets stored in the SPIFFS/LittleFS filesystem.
 
-- Use **PlatformIO (VS Code)**
-  or
-- Use the web flasher:
-  👉 https://esp32projects.myshack.ch/
+Examples:
+
+```text
+/splash_screen.jpg
+/timer.jpg
+/flags/large/*.jpg
+/flags/small/*.jpg
+```
+
+Make sure the filesystem image is uploaded/flashed together with the firmware.
+
+Without these files some UI elements or flags may be missing.
 
 ---
 
-### 2. Install the WPSD WebSocket server
+# Installation
 
-SSH into your WPSD device and run the installer (handles everything: dependencies, firewall, avahi mDNS alias, systemd service):
+# 1 — Flash the ESP32
+
+You can either:
+
+- Build using PlatformIO (VS Code)
+or
+- Use the web installer:
+
+https://esp32projects.myshack.ch/
+
+---
+
+# 2 — Configure Wi-Fi
+
+On first boot the ESP32 automatically creates a Wi-Fi configuration portal.
+
+Connect your phone or computer to:
+
+```text
+esp32-wpsd
+```
+
+Then open the captive portal page and enter your Wi-Fi credentials.
+
+Credentials are stored in flash memory.
+
+---
+
+# Factory Reset
+
+To erase saved Wi-Fi settings:
+
+- Touch and hold the screen during boot
+- Keep pressed for about 3 seconds
+
+The device will erase stored credentials and restart configuration mode.
+
+---
+
+# 3 — Connect to WPSD via SSH
+
+Many users are not familiar with SSH access to WPSD.
+
+This section explains how to connect from Windows, macOS or Linux.
+
+---
+
+## Step 1 — Find your hotspot IP address
+
+Possible methods:
+
+- WPSD dashboard
+- Router DHCP client list
+- Using hostname:
+
+```text
+wpsd.local
+```
+
+Examples:
+
+```text
+192.168.1.42
+```
+
+or
+
+```text
+wpsd.local
+```
+
+---
+
+## Step 2 — Open an SSH terminal
+
+### Windows
+
+You can use:
+
+- PowerShell (recommended)
+or
+- PuTTY
+
+Example:
+
+```powershell
+ssh pi-star@wpsd.local
+```
+
+or
+
+```powershell
+ssh pi-star@192.168.1.42
+```
+
+### macOS / Linux
+
+Open Terminal and type:
+
+```bash
+ssh pi-star@wpsd.local
+```
+
+---
+
+## Step 3 — Accept SSH fingerprint
+
+The first connection may display:
+
+```text
+The authenticity of host can't be established
+```
+
+This is normal.
+
+Type:
+
+```text
+yes
+```
+
+and press Enter.
+
+---
+
+## Step 4 — Enter password
+
+Enter your WPSD password.
+
+Important:
+the password will not visually appear while typing.
+This is normal Linux behaviour.
+
+---
+
+## Step 5 — Run installer
+
+Once connected via SSH, run:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/InstallationFiles/install_all.sh)
 ```
 
-**Updating an existing installation** (script only, no reinstall needed):
+The installer automatically:
+
+- installs dependencies
+- installs WebSocket server
+- configures firewall
+- configures Avahi/mDNS
+- creates systemd service
+
+---
+
+# Updating Existing Installation
+
+To update only the Python server script:
 
 ```bash
 sudo curl -fsSL https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/InstallationFiles/monitor_mmdvm_ws.py \
@@ -112,26 +302,9 @@ sudo curl -fsSL https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/ma
 
 ---
 
-## Dependencies
+# Service Management
 
-### ESP32 firmware
-
-- TFT_eSPI
-- XPT2046_Touchscreen
-- arduinoWebSockets
-- ArduinoJson v7
-- espressif32 @ 6.9.0
-
----
-
-### WPSD server
-
-- Python 3.9+
-- `websockets==13.1`
-
----
-
-## Service Management
+Useful commands:
 
 ```bash
 sudo systemctl status monitor_mmdvm_ws
@@ -141,12 +314,74 @@ sudo journalctl -u monitor_mmdvm_ws -f
 
 ---
 
-## License
+# Troubleshooting
+
+## ESP32 cannot connect
+
+Check:
+
+- ESP32 and hotspot are on same network
+- Wi-Fi credentials are correct
+- WebSocket service is running
+- Port 8765 is reachable
+
+---
+
+## `wpsd.local` does not work
+
+mDNS sometimes does not work correctly on Windows.
+
+Use direct IP address instead.
+
+Example:
+
+```text
+192.168.1.42
+```
+
+---
+
+## SSH connection refused
+
+Check:
+
+- SSH enabled in WPSD
+- Correct IP address
+- Hotspot powered on
+
+---
+
+## Missing flags or splash screen
+
+Make sure SPIFFS/LittleFS image was uploaded correctly.
+
+---
+
+# Dependencies
+
+## ESP32 firmware
+
+- TFT_eSPI
+- XPT2046_Touchscreen
+- arduinoWebSockets
+- ArduinoJson v7
+- espressif32 @ 6.9.0
+
+---
+
+## WPSD server
+
+- Python 3.9+
+- websockets==13.1
+
+---
+
+# License
 
 MIT License
 
 ---
 
-## Author
+# Author
 
 HB9IIU
