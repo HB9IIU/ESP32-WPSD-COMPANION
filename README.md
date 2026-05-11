@@ -295,7 +295,7 @@ The installer automatically:
 To update only the Python server script:
 
 ```bash
-sudo curl -fsSL https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/InstallationFiles/monitor_mmdvm_ws.py \
+sudo curl -fSL https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/InstallationFiles/monitor_mmdvm_ws.py \
   -o /home/pi-star/monitor_mmdvm_ws.py \
   && sudo systemctl restart monitor_mmdvm_ws
 ```
