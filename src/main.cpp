@@ -1029,11 +1029,18 @@ bool fetchRemoteFirmwareBuildNumber(uint32_t &remoteBuildNumber)
     HTTPClient http;
     http.setTimeout(UPDATE_CHECK_TIMEOUT_MS);
 
-    if (!http.begin(client, kFirmwareManifestUrl))
+    String manifestUrl = kFirmwareManifestUrl;
+    manifestUrl += "?check=";
+    manifestUrl += String(millis());
+
+    if (!http.begin(client, manifestUrl))
     {
         Serial.println("[Update] Failed to start manifest request");
         return false;
     }
+
+    http.addHeader("Cache-Control", "no-cache");
+    http.addHeader("Pragma", "no-cache");
 
     const int httpCode = http.GET();
 
