@@ -1,5 +1,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <ESPmDNS.h>
 #include <Preferences.h>
 #include <WebSocketsClient.h>
@@ -28,6 +30,9 @@ constexpr size_t MAX_STATIC_TGS = 20;
 constexpr uint32_t METRIC_HOLD_MS = 5000;
 constexpr uint32_t WS_RECOVERY_INTERVAL_MS = 5000;
 constexpr uint32_t WIFI_RECOVERY_INTERVAL_MS = 10000;
+constexpr uint32_t UPDATE_CHECK_TIMEOUT_MS = 3500;
+constexpr uint32_t UPDATE_NOTICE_DISPLAY_MS = 4500;
+const char *kFirmwareManifestUrl = "https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/firmware/manifest.json";
 
 struct SnapshotState
 {
@@ -1006,6 +1011,117 @@ void displaySplashScreen()
 {
     tft.fillScreen(TFT_BLACK);
     TJpgDec.drawFsJpg(0, 0, "/splash_screen.jpg", SPIFFS);
+}
+
+bool fetchRemoteFirmwareBuildNumber(uint32_t &remoteBuildNumber)
+{
+    remoteBuildNumber = 0;
+
+    if (WiFi.status() != WL_CONNECTED)
+    {
+        Serial.println("[Update] Skipping check: WiFi not connected");
+        return false;
+    }
+
+    WiFiClientSecure client;
+    client.setInsecure();
+
+    HTTPClient http;
+    http.setTimeout(UPDATE_CHECK_TIMEOUT_MS);
+
+    if (!http.begin(client, kFirmwareManifestUrl))
+    {
+        Serial.println("[Update] Failed to start manifest request");
+        return false;
+    }
+
+    const int httpCode = http.GET();
+
+    if (httpCode != HTTP_CODE_OK)
+    {
+        Serial.printf("[Update] Manifest request failed: HTTP %d\n", httpCode);
+        http.end();
+        return false;
+    }
+
+    const String payload = http.getString();
+    http.end();
+
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, payload);
+
+    if (error)
+    {
+        Serial.printf("[Update] Manifest JSON error: %s\n", error.c_str());
+        return false;
+    }
+
+    const uint32_t parsedBuildNumber = doc["build_number"] | 0;
+
+    if (parsedBuildNumber == 0)
+    {
+        Serial.println("[Update] Manifest missing build_number");
+        return false;
+    }
+
+    remoteBuildNumber = parsedBuildNumber;
+    return true;
+}
+
+void showFirmwareUpdateNotice(uint32_t remoteBuildNumber)
+{
+    tft.fillScreen(TFT_BLACK);
+    tft.drawRect(8, 8, tft.width() - 16, tft.height() - 16, tft.color565(80, 200, 240));
+
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(tft.color565(80, 200, 240), TFT_BLACK);
+    tft.setFreeFont(&RobotoCondensedBold24px7b);
+    tft.drawString("NEW FIRMWARE", tft.width() / 2, 58);
+
+    char versionText[40];
+    snprintf(versionText, sizeof(versionText), "Build %lu available", static_cast<unsigned long>(remoteBuildNumber));
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.setFreeFont(&RobotoCondensedRegular16px7b);
+    tft.drawString(versionText, tft.width() / 2, 104);
+
+    char currentText[48];
+    snprintf(currentText, sizeof(currentText), "Installed build %lu", static_cast<unsigned long>(FIRMWARE_BUILD_NUMBER));
+    tft.setTextColor(tft.color565(165, 175, 185), TFT_BLACK);
+    tft.setFreeFont(&RobotoMonoRegular10px7b);
+    tft.drawString(currentText, tft.width() / 2, 139);
+
+    tft.setTextColor(tft.color565(240, 210, 120), TFT_BLACK);
+    tft.setFreeFont(&RobotoCondensedBold12px7b);
+    tft.drawString("Flash via USB / Web Flasher", tft.width() / 2, 184);
+
+    tft.setFreeFont(nullptr);
+    tft.setTextDatum(TL_DATUM);
+
+    delay(UPDATE_NOTICE_DISPLAY_MS);
+}
+
+void checkForFirmwareUpdateAtBoot()
+{
+    Serial.printf("[Update] Local firmware build: %lu\n", static_cast<unsigned long>(FIRMWARE_BUILD_NUMBER));
+
+    uint32_t remoteBuildNumber = 0;
+
+    if (!fetchRemoteFirmwareBuildNumber(remoteBuildNumber))
+    {
+        Serial.println("[Update] Check unavailable; continuing boot");
+        return;
+    }
+
+    Serial.printf("[Update] Remote firmware build: %lu\n", static_cast<unsigned long>(remoteBuildNumber));
+
+    if (remoteBuildNumber > FIRMWARE_BUILD_NUMBER)
+    {
+        Serial.println("[Update] New firmware available");
+        showFirmwareUpdateNotice(remoteBuildNumber);
+        return;
+    }
+
+    Serial.println("[Update] Firmware is current");
 }
 
 bool looksLikeCountryCode(const char *countryCode)
@@ -3003,6 +3119,8 @@ void setup()
              "WiFi connected %s", WiFi.localIP().toString().c_str());
     updateFooterStatusTextDisplay(wifiStatusText, wifiStatusColor);
     Serial.printf("\nConnected! IP: %s\n", WiFi.localIP().toString().c_str());
+
+    checkForFirmwareUpdateAtBoot();
 
     while (!discoverWPSD()); // retries until WPSD host is found
     Serial.printf("[Discovery] Using WPSD host: %s\n", g_wsHost);
