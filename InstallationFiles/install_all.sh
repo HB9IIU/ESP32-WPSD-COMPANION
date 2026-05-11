@@ -2,7 +2,20 @@
 
 cat <<'EOF'
 
- ESP32 WPSD Companion — Installer
+  ╔══════════════════════════════════════════════════════════╗
+  ║                                                          ║
+  ║    ███████╗███████╗██████╗ ██████╗ ██████╗               ║
+  ║    ██╔════╝██╔════╝██╔══██╗╚════██╗╚════██╗              ║
+  ║    █████╗  ███████╗██████╔╝ █████╔╝ █████╔╝              ║
+  ║    ██╔══╝  ╚════██║██╔═══╝ ██╔═══╝ ╚═══██╗              ║
+  ║    ███████╗███████║██║     ███████╗██████╔╝              ║
+  ║    ╚══════╝╚══════╝╚═╝     ╚══════╝╚═════╝               ║
+  ║                                                          ║
+  ║    ESP32 WPSD Companion — WebSocket Bridge Installer     ║
+  ║    by HB9IIU                                             ║
+  ║                                                          ║
+  ╚══════════════════════════════════════════════════════════╝
+
 EOF
 
 set -euo pipefail
@@ -73,9 +86,12 @@ fi
 # =========================================================
 step 3 "Installing Python prerequisites..."
 
-sudo apt-get update -qq || warn "apt-get update failed — continuing anyway"
+info "Refreshing package lists — this may take a moment..."
+sudo apt-get update 2>&1 | tail -1 || warn "apt-get update failed — continuing anyway"
+ok "package lists refreshed"
 
 if ! command -v pip3 >/dev/null 2>&1; then
+    info "Installing python3-pip..."
     sudo apt-get install -y python3-pip || die "could not install python3-pip"
     ok "python3-pip installed"
 else
@@ -128,24 +144,27 @@ if pgrep -f "python3 ${PY_SCRIPT}" >/dev/null 2>&1; then
 fi
 
 # =========================================================
-# [6/7] Open firewall port for WebSocket
+# [6/7] Check firewall for WebSocket port
 # =========================================================
-step 6 "Opening firewall port ${WS_PORT}..."
+step 6 "Checking firewall for port ${WS_PORT}..."
 
-if sudo iptables -C INPUT -p tcp --dport "${WS_PORT}" -j ACCEPT 2>/dev/null; then
-    ok "iptables rule already present"
-else
-    sudo iptables -I INPUT 1 -p tcp --dport "${WS_PORT}" -j ACCEPT
-    ok "iptables rule added for port ${WS_PORT}"
-fi
+DEFAULT_POLICY="$(sudo iptables -L INPUT --line-numbers -n 2>/dev/null | grep '^Chain INPUT' | grep -oP 'policy \K\w+' || echo 'UNKNOWN')"
 
-# Persist iptables rules across reboots if iptables-persistent is available
-if command -v netfilter-persistent >/dev/null 2>&1; then
-    sudo netfilter-persistent save >/dev/null 2>&1 && ok "iptables rules persisted" || warn "could not persist iptables rules"
-elif command -v iptables-save >/dev/null 2>&1 && [ -d /etc/iptables ]; then
-    sudo iptables-save | sudo tee /etc/iptables/rules.v4 >/dev/null && ok "iptables rules saved to /etc/iptables/rules.v4" || warn "could not save iptables rules"
+if [ "${DEFAULT_POLICY}" = "ACCEPT" ]; then
+    ok "firewall default policy is ACCEPT — port ${WS_PORT} is open, no rule needed"
 else
-    warn "could not persist iptables rules across reboots — rule is active for this session only"
+    info "default INPUT policy is ${DEFAULT_POLICY} — adding explicit ACCEPT rule for port ${WS_PORT}"
+    if sudo iptables -C INPUT -p tcp --dport "${WS_PORT}" -j ACCEPT 2>/dev/null; then
+        ok "iptables rule already present"
+    else
+        sudo iptables -I INPUT 1 -p tcp --dport "${WS_PORT}" -j ACCEPT
+        ok "iptables rule added for port ${WS_PORT}"
+    fi
+    if command -v netfilter-persistent >/dev/null 2>&1; then
+        sudo netfilter-persistent save >/dev/null 2>&1 && ok "iptables rules persisted" || warn "could not persist iptables rules"
+    elif [ -d /etc/iptables ]; then
+        sudo iptables-save | sudo tee /etc/iptables/rules.v4 >/dev/null && ok "iptables rules saved" || warn "could not persist iptables rules"
+    fi
 fi
 
 # =========================================================
@@ -182,6 +201,39 @@ sudo systemctl daemon-reload  || die "systemctl daemon-reload failed"
 sudo systemctl enable "${SERVICE_NAME}" || die "failed to enable ${SERVICE_NAME}"
 sudo systemctl restart "${SERVICE_NAME}" || die "failed to restart ${SERVICE_NAME}"
 ok "service enabled and started"
+
+# =========================================================
+# Update /etc/motd
+# =========================================================
+MOTD_MARKER="# ESP32-WPSD-COMPANION"
+MOTD_FILE="/etc/motd"
+
+if grep -q "${MOTD_MARKER}" "${MOTD_FILE}" 2>/dev/null; then
+    # Remove previous block so we can rewrite it cleanly on upgrade
+    sudo sed -i "/${MOTD_MARKER}/,/^${MOTD_MARKER}-END$/d" "${MOTD_FILE}"
+fi
+
+sudo tee -a "${MOTD_FILE}" >/dev/null <<MOTD
+
+${MOTD_MARKER}
+─────────────────────────────────────────────────────────────
+  ESP32 WPSD Companion  —  by HB9IIU
+─────────────────────────────────────────────────────────────
+  A WebSocket bridge is running on this device, streaming
+  real-time DMR activity to an ESP32 CYD touchscreen display.
+
+  Service : ${SERVICE_NAME}
+  Port    : ${WS_PORT}
+  Script  : ${PY_SCRIPT}
+
+  Useful commands:
+    sudo systemctl status ${SERVICE_NAME} --no-pager
+    journalctl -u ${SERVICE_NAME} -f
+─────────────────────────────────────────────────────────────
+${MOTD_MARKER}-END
+MOTD
+
+ok "/etc/motd updated"
 
 # =========================================================
 # Final verification
