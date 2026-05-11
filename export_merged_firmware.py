@@ -5,6 +5,7 @@ import csv
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -38,6 +39,8 @@ FILESYSTEM_IMAGE_NAMES = {
 }
 
 SKIP_EXPORT_ENV_VAR = "EXPORT_MERGED_FIRMWARE_SKIP"
+BUILD_NUMBER_HEADER = "include/build_number.h"
+BUILD_NUMBER_DEFINE = "FIRMWARE_BUILD_NUMBER"
 
 FIRMWARE_URL = (
     "https://raw.githubusercontent.com/"
@@ -213,7 +216,27 @@ def calculate_sha256(file_path: Path) -> str:
     return sha256.hexdigest()
 
 
-def create_manifest(output_dir: Path) -> None:
+def read_firmware_build_number(project_dir: Path) -> int:
+    header_path = project_dir / BUILD_NUMBER_HEADER
+
+    if not header_path.exists():
+        log(f"Build number header not found: {header_path}")
+        return 0
+
+    match = re.search(
+        rf"^\s*#define\s+{BUILD_NUMBER_DEFINE}\s+(\d+)\s*$",
+        header_path.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+
+    if match is None:
+        log(f"Build number define not found in {header_path}")
+        return 0
+
+    return int(match.group(1))
+
+
+def create_manifest(project_dir: Path, output_dir: Path) -> None:
     firmware_file = output_dir / "firmware.bin"
     manifest_file = output_dir / "manifest.json"
 
@@ -222,10 +245,12 @@ def create_manifest(output_dir: Path) -> None:
         return
 
     now_utc = datetime.now(timezone.utc)
+    build_number = read_firmware_build_number(project_dir)
 
     manifest = {
-        "version": now_utc.strftime("%Y.%m.%d.%H%M"),
-        "build": now_utc.isoformat(),
+        "build_number": build_number,
+        "version": str(build_number),
+        "build_time": now_utc.isoformat(),
         "firmware": "firmware.bin",
         "size": firmware_file.stat().st_size,
         "sha256": calculate_sha256(firmware_file),
@@ -233,7 +258,7 @@ def create_manifest(output_dir: Path) -> None:
     }
 
     manifest_file.write_text(
-        json.dumps(manifest, indent=2),
+        json.dumps(manifest, indent=2) + "\n",
         encoding="utf-8",
     )
 
@@ -300,7 +325,7 @@ def export_merged_firmware(source, target, env) -> None:
 
     log(f"Wrote {output_file}")
 
-    create_manifest(output_dir)
+    create_manifest(project_dir, output_dir)
 
 
 def should_export_on_exit() -> bool:

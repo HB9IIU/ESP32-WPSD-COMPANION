@@ -9,6 +9,7 @@
 #include <sys/time.h>
 #include <stdio.h>
 #include "HB9IIUportalBasic.h"
+#include "build_number.h"
 #define WS_PORT 8765
 #define WS_PATH "/"
 
@@ -830,6 +831,7 @@ void parseHeardSummary(JsonDocument &doc)
     if (g_currentPage == 0)
     {
         updateRecentHeardFlagsDisplay();
+        g_lastFooterStatusText[0] = '\0'; // force redraw — flag JPEG rendering can bleed into footer area
         updateFooterStatusDisplay();
     }
     else
@@ -2898,6 +2900,7 @@ bool discoverWPSD()
 void setup()
 {
     Serial.begin(115200);
+    Serial.printf("[Boot] Firmware build: %lu\n", static_cast<unsigned long>(FIRMWARE_BUILD_NUMBER));
 
     // Start the SPI for the touchscreen and init the touchscreen
     touchscreenSPI.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
