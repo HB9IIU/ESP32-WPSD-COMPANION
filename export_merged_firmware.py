@@ -37,6 +37,39 @@ FILESYSTEM_IMAGE_NAMES = {
 
 SKIP_EXPORT_ENV_VAR = "EXPORT_MERGED_FIRMWARE_SKIP"
 
+def create_manifest(output_dir: Path) -> None:
+    import hashlib
+    from datetime import datetime, timezone
+
+    firmware_file = output_dir / "firmware.bin"
+
+    if not firmware_file.exists():
+        log("firmware.bin not found, cannot create manifest")
+        return
+
+    firmware_size = firmware_file.stat().st_size
+
+    sha256 = hashlib.sha256()
+    with firmware_file.open("rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            sha256.update(chunk)
+
+    manifest = {
+        "version": datetime.now().strftime("%Y.%m.%d.%H%M"),
+        "build": datetime.now(timezone.utc).isoformat(),
+        "firmware": "firmware.bin",
+        "size": firmware_size,
+        "sha256": sha256.hexdigest(),
+        "url": "https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/firmware/firmware.bin"
+    }
+
+    manifest_file = output_dir / "manifest.json"
+    manifest_file.write_text(
+        json.dumps(manifest, indent=2),
+        encoding="utf-8"
+    )
+
+    log(f"Wrote {manifest_file}")
 
 def log(message: str) -> None:
     print(f"[merged-firmware] {message}")
@@ -204,7 +237,7 @@ def export_merged_firmware(source, target, env) -> None:
         raise RuntimeError("Failed to create merged firmware image")
 
     log(f"Wrote {output_file}")
-
+    create_manifest(output_dir)
 
 def should_export_on_exit() -> bool:
     if os.environ.get(SKIP_EXPORT_ENV_VAR) == "1":
