@@ -46,6 +46,14 @@ FIRMWARE_URL = (
     "https://raw.githubusercontent.com/"
     "HB9IIU/ESP32-WPSD-COMPANION/main/firmware/firmware.bin"
 )
+APP_URL = (
+    "https://raw.githubusercontent.com/"
+    "HB9IIU/ESP32-WPSD-COMPANION/main/firmware/app.bin"
+)
+SPIFFS_URL = (
+    "https://raw.githubusercontent.com/"
+    "HB9IIU/ESP32-WPSD-COMPANION/main/firmware/spiffs.bin"
+)
 
 
 def log(message: str) -> None:
@@ -236,12 +244,23 @@ def read_firmware_build_number(project_dir: Path) -> int:
     return int(match.group(1))
 
 
-def create_manifest(project_dir: Path, output_dir: Path) -> None:
+def create_manifest(
+    project_dir: Path,
+    output_dir: Path,
+    app_offset: int,
+    filesystem_part: tuple[int, Path] | None,
+) -> None:
     firmware_file = output_dir / "firmware.bin"
+    app_file = output_dir / "app.bin"
+    spiffs_file = output_dir / "spiffs.bin"
     manifest_file = output_dir / "manifest.json"
 
     if not firmware_file.exists():
         log("firmware.bin not found, cannot create manifest")
+        return
+
+    if not app_file.exists():
+        log("app.bin not found, cannot create manifest")
         return
 
     now_utc = datetime.now(timezone.utc)
@@ -254,7 +273,30 @@ def create_manifest(project_dir: Path, output_dir: Path) -> None:
         "size": firmware_file.stat().st_size,
         "sha256": calculate_sha256(firmware_file),
         "url": FIRMWARE_URL,
+        "update_parts": [
+            {
+                "name": "app",
+                "firmware": "app.bin",
+                "offset": app_offset,
+                "size": app_file.stat().st_size,
+                "sha256": calculate_sha256(app_file),
+                "url": APP_URL,
+            }
+        ],
     }
+
+    if filesystem_part is not None and spiffs_file.exists():
+        filesystem_offset, _ = filesystem_part
+        manifest["update_parts"].append(
+            {
+                "name": "spiffs",
+                "firmware": "spiffs.bin",
+                "offset": filesystem_offset,
+                "size": spiffs_file.stat().st_size,
+                "sha256": calculate_sha256(spiffs_file),
+                "url": SPIFFS_URL,
+            }
+        )
 
     manifest_file.write_text(
         json.dumps(manifest, indent=2) + "\n",
@@ -262,6 +304,28 @@ def create_manifest(project_dir: Path, output_dir: Path) -> None:
     )
 
     log(f"Wrote {manifest_file}")
+
+
+def export_update_parts(
+    output_dir: Path,
+    app_firmware_path: Path,
+    filesystem_part: tuple[int, Path] | None,
+) -> None:
+    app_output = output_dir / "app.bin"
+    shutil.copy2(app_firmware_path, app_output)
+    log(f"Wrote {app_output}")
+
+    spiffs_output = output_dir / "spiffs.bin"
+
+    if filesystem_part is None:
+        if spiffs_output.exists():
+            spiffs_output.unlink()
+        log("No filesystem image found, skipped spiffs.bin")
+        return
+
+    _, filesystem_path = filesystem_part
+    shutil.copy2(filesystem_path, spiffs_output)
+    log(f"Wrote {spiffs_output}")
 
 
 def export_merged_firmware(source, target, env) -> None:
@@ -304,6 +368,8 @@ def export_merged_firmware(source, target, env) -> None:
     if filesystem_part is not None:
         parts.append(filesystem_part)
 
+    export_update_parts(output_dir, app_firmware_path, filesystem_part)
+
     command = [
         *find_esptool_command(env),
         "--chip",
@@ -324,7 +390,7 @@ def export_merged_firmware(source, target, env) -> None:
 
     log(f"Wrote {output_file}")
 
-    create_manifest(project_dir, output_dir)
+    create_manifest(project_dir, output_dir, app_offset, filesystem_part)
 
 
 def should_export_on_exit() -> bool:

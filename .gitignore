@@ -13,6 +13,8 @@ configExisting/
 
 firmware/*
 !firmware/firmware.bin
+!firmware/app.bin
+!firmware/spiffs.bin
 !firmware/app.jpeg
 !firmware/manifest.json
 
