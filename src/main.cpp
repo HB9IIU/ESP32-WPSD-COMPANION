@@ -1028,6 +1028,7 @@ bool fetchRemoteFirmwareBuildNumber(uint32_t &remoteBuildNumber)
 
     HTTPClient http;
     http.setTimeout(UPDATE_CHECK_TIMEOUT_MS);
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 
     String manifestUrl = kFirmwareManifestUrl;
     manifestUrl += "?check=";
