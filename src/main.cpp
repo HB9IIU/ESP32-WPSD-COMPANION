@@ -1044,6 +1044,7 @@ static void saveSpiffsSha256(const String &sha256)
 
 static void drawOtaBaseScreen(uint32_t localBuild, uint32_t remoteBuild)
 {
+    s_lastDrawnLabel = "";
     tft.fillScreen(TFT_BLACK);
 
     const uint16_t bannerColor = tft.color565(8, 24, 72);
@@ -1080,11 +1081,16 @@ static void updateOtaProgress(const char *label, int pct)
     constexpr int kLabelY = 82;
     constexpr int kPctY   = 150;
 
-    tft.fillRect(0, kLabelY - 12, tft.width(), 20, TFT_BLACK);
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextColor(tft.color565(240, 210, 120), TFT_BLACK);
-    tft.setFreeFont(&RobotoCondensedBold12px7b);
-    tft.drawString(label, tft.width() / 2, kLabelY);
+    // Only redraw label when it changes — prevents flickering on every progress tick
+    if (label != s_lastDrawnLabel)
+    {
+        s_lastDrawnLabel = label;
+        tft.fillRect(0, kLabelY - 12, tft.width(), 20, TFT_BLACK);
+        tft.setTextDatum(MC_DATUM);
+        tft.setTextColor(tft.color565(240, 210, 120), TFT_BLACK);
+        tft.setFreeFont(&RobotoCondensedBold12px7b);
+        tft.drawString(label, tft.width() / 2, kLabelY);
+    }
 
     const int fill = pct <= 0 ? 0 : (pct >= 100 ? kBarW : kBarW * pct / 100);
     tft.fillRect(kBarX,        kBarY, fill,        kBarH, tft.color565(0, 180, 100));
@@ -1093,9 +1099,10 @@ static void updateOtaProgress(const char *label, int pct)
 
     char pctBuf[8];
     snprintf(pctBuf, sizeof(pctBuf), "%d%%", pct);
-    tft.fillRect(0, kPctY - 10, tft.width(), 16, TFT_BLACK);
+    tft.fillRect(0, kPctY - 14, tft.width(), 30, TFT_BLACK);
+    tft.setTextDatum(MC_DATUM);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.setFreeFont(&RobotoCondensedRegular10px7b);
+    tft.setFreeFont(&RobotoCondensedBold24px7b);
     tft.drawString(pctBuf, tft.width() / 2, kPctY);
 
     tft.setFreeFont(nullptr);
