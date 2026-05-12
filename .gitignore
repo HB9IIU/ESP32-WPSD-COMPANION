@@ -15,8 +15,12 @@ firmware/*
 !firmware/firmware.bin
 !firmware/app.bin
 !firmware/spiffs.bin
+!firmware/bootloader.bin
+!firmware/partitions.bin
+!firmware/boot_app0.bin
 !firmware/app.jpeg
 !firmware/manifest.json
+!firmware/flasher_manifest.json
 
 firmware/export_merged_firmware.py
 

@@ -42,18 +42,16 @@ SKIP_EXPORT_ENV_VAR = "EXPORT_MERGED_FIRMWARE_SKIP"
 BUILD_NUMBER_HEADER = "include/build_number.h"
 BUILD_NUMBER_DEFINE = "FIRMWARE_BUILD_NUMBER"
 
-FIRMWARE_URL = (
+GITHUB_BASE = (
     "https://raw.githubusercontent.com/"
-    "HB9IIU/ESP32-WPSD-COMPANION/main/firmware/firmware.bin"
+    "HB9IIU/ESP32-WPSD-COMPANION/main/firmware/"
 )
-APP_URL = (
-    "https://raw.githubusercontent.com/"
-    "HB9IIU/ESP32-WPSD-COMPANION/main/firmware/app.bin"
-)
-SPIFFS_URL = (
-    "https://raw.githubusercontent.com/"
-    "HB9IIU/ESP32-WPSD-COMPANION/main/firmware/spiffs.bin"
-)
+FIRMWARE_URL     = GITHUB_BASE + "firmware.bin"
+APP_URL          = GITHUB_BASE + "app.bin"
+SPIFFS_URL       = GITHUB_BASE + "spiffs.bin"
+BOOTLOADER_URL   = GITHUB_BASE + "bootloader.bin"
+PARTITIONS_URL   = GITHUB_BASE + "partitions.bin"
+BOOT_APP0_URL    = GITHUB_BASE + "boot_app0.bin"
 
 
 def log(message: str) -> None:
@@ -306,17 +304,66 @@ def create_manifest(
     log(f"Wrote {manifest_file}")
 
 
+def create_flasher_manifest(
+    output_dir: Path,
+    flash_images: list[tuple[int, Path]],
+    app_offset: int,
+    filesystem_part: tuple[int, Path] | None,
+) -> None:
+    """Generate the ESP Web Tools flasher manifest with all flash parts."""
+
+    url_map = {
+        "bootloader.bin": BOOTLOADER_URL,
+        "partitions.bin": PARTITIONS_URL,
+        "boot_app0.bin":  BOOT_APP0_URL,
+        "app.bin":        APP_URL,
+        "spiffs.bin":     SPIFFS_URL,
+        "littlefs.bin":   GITHUB_BASE + "littlefs.bin",
+    }
+
+    parts = []
+
+    for offset, path in flash_images:
+        dest_name = Path(path).name
+        url = url_map.get(dest_name, GITHUB_BASE + dest_name)
+        parts.append({"path": url, "offset": offset})
+
+    parts.append({"path": APP_URL, "offset": app_offset})
+
+    if filesystem_part is not None:
+        fs_offset, fs_path = filesystem_part
+        fs_name = fs_path.name
+        parts.append({"path": url_map.get(fs_name, GITHUB_BASE + fs_name), "offset": fs_offset})
+
+    manifest = {
+        "name": "WPSD Companion",
+        "builds": [{"chipFamily": "ESP32", "parts": parts}],
+    }
+
+    out = output_dir / "flasher_manifest.json"
+    out.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    log(f"Wrote {out}")
+
+
 def export_update_parts(
     output_dir: Path,
     app_firmware_path: Path,
+    flash_images: list[tuple[int, Path]],
     filesystem_part: tuple[int, Path] | None,
 ) -> None:
+    # Raw app binary
     app_output = output_dir / "app.bin"
     shutil.copy2(app_firmware_path, app_output)
     log(f"Wrote {app_output}")
 
-    spiffs_output = output_dir / "spiffs.bin"
+    # Bootloader, partition table, boot_app0
+    for _, src_path in flash_images:
+        dest = output_dir / src_path.name
+        shutil.copy2(src_path, dest)
+        log(f"Wrote {dest}")
 
+    # SPIFFS / LittleFS
+    spiffs_output = output_dir / "spiffs.bin"
     if filesystem_part is None:
         if spiffs_output.exists():
             spiffs_output.unlink()
@@ -324,8 +371,10 @@ def export_update_parts(
         return
 
     _, filesystem_path = filesystem_part
-    shutil.copy2(filesystem_path, spiffs_output)
-    log(f"Wrote {spiffs_output}")
+    dest_name = "spiffs.bin" if "spiffs" in filesystem_path.name else filesystem_path.name
+    dest = output_dir / dest_name
+    shutil.copy2(filesystem_path, dest)
+    log(f"Wrote {dest}")
 
 
 def export_merged_firmware(source, target, env) -> None:
@@ -352,23 +401,25 @@ def export_merged_firmware(source, target, env) -> None:
     idedata = load_json(idedata_path)
     chip_name = detect_chip_name(idedata)
 
-    parts: list[tuple[int, Path]] = []
-
-    for image in idedata.get("extra", {}).get("flash_images", []):
-        parts.append((normalize_offset(image["offset"]), Path(image["path"])))
+    flash_images: list[tuple[int, Path]] = [
+        (normalize_offset(img["offset"]), Path(img["path"]))
+        for img in idedata.get("extra", {}).get("flash_images", [])
+    ]
 
     app_offset = normalize_offset(
         idedata.get("extra", {}).get("application_offset", "0x10000")
     )
 
-    parts.append((app_offset, app_firmware_path))
-
     filesystem_part = find_filesystem_part(project_dir, env_name, build_dir)
 
+    export_update_parts(output_dir, app_firmware_path, flash_images, filesystem_part)
+    create_flasher_manifest(output_dir, flash_images, app_offset, filesystem_part)
+
+    # Build full parts list for esptool merge_bin
+    parts: list[tuple[int, Path]] = list(flash_images)
+    parts.append((app_offset, app_firmware_path))
     if filesystem_part is not None:
         parts.append(filesystem_part)
-
-    export_update_parts(output_dir, app_firmware_path, filesystem_part)
 
     command = [
         *find_esptool_command(env),

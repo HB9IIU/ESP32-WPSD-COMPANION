@@ -1,0 +1,30 @@
+{
+  "name": "WPSD Companion",
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        {
+          "path": "https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/firmware/bootloader.bin",
+          "offset": 4096
+        },
+        {
+          "path": "https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/firmware/partitions.bin",
+          "offset": 32768
+        },
+        {
+          "path": "https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/firmware/boot_app0.bin",
+          "offset": 57344
+        },
+        {
+          "path": "https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/firmware/app.bin",
+          "offset": 65536
+        },
+        {
+          "path": "https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/firmware/spiffs.bin",
+          "offset": 2686976
+        }
+      ]
+    }
+  ]
+}
