@@ -1042,6 +1042,23 @@ static void saveSpiffsSha256(const String &sha256)
     prefs.end();
 }
 
+static uint32_t getLastSuccessfulOtaBuild()
+{
+    Preferences prefs;
+    if (!prefs.begin("ota", true)) return 0;
+    uint32_t val = prefs.getUInt("last_build", 0);
+    prefs.end();
+    return val;
+}
+
+static void saveLastSuccessfulOtaBuild(uint32_t buildNumber)
+{
+    Preferences prefs;
+    if (!prefs.begin("ota", false)) return;
+    prefs.putUInt("last_build", buildNumber);
+    prefs.end();
+}
+
 static void drawOtaBaseScreen(uint32_t localBuild, uint32_t remoteBuild)
 {
     s_lastDrawnLabel = "";
@@ -1236,6 +1253,7 @@ static void performOtaUpdate(const FirmwareManifest &manifest)
 
     if (ret == HTTP_UPDATE_OK)
     {
+        saveLastSuccessfulOtaBuild(manifest.buildNumber);
         updateOtaProgress("Done  —  rebooting", 100);
         Serial.println("[OTA] App OK — rebooting");
         delay(1000);
@@ -1265,15 +1283,20 @@ void checkForFirmwareUpdateAtBoot()
     Serial.printf("[Update] Remote build: %lu\n",
                   static_cast<unsigned long>(manifest.buildNumber));
 
-    if (manifest.buildNumber > FIRMWARE_BUILD_NUMBER)
+    const uint32_t lastOtaBuild = getLastSuccessfulOtaBuild();
+    Serial.printf("[Update] Last OTA build: %lu\n",
+                  static_cast<unsigned long>(lastOtaBuild));
+
+    if (manifest.buildNumber <= FIRMWARE_BUILD_NUMBER ||
+        manifest.buildNumber <= lastOtaBuild)
+    {
+        Serial.println("[Update] Firmware is current");
+    }
+    else
     {
         Serial.println("[Update] Newer firmware — starting OTA");
         performOtaUpdate(manifest);
         Serial.println("[Update] OTA failed — continuing boot");
-    }
-    else
-    {
-        Serial.println("[Update] Firmware is current");
     }
 }
 
