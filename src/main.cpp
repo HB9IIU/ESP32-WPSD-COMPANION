@@ -1893,6 +1893,7 @@ void drawClockDemo(const char *timeText)
     const int height = 14;
     const int x = tft.width() - rightMargin - width;
 
+    tft.fillRect(x, 0, tft.width() - x, 31, backgroundColor);
     tft.setTextDatum(TR_DATUM);
     tft.setTextColor(textColor, backgroundColor);
     tft.setFreeFont(&RobotoMonoRegular12px7b);
@@ -2746,10 +2747,10 @@ void drawHotspotInfoPage()
     const uint16_t bannerColor = tft.color565(8, 24, 72);
     tft.fillRect(0, 0, tft.width(), 32, bannerColor);
     tft.drawFastHLine(0, 31, tft.width(), TFT_CYAN);
-    tft.setTextDatum(TL_DATUM);
+    tft.setTextDatum(TC_DATUM);
     tft.setTextColor(TFT_WHITE, bannerColor);
     tft.setFreeFont(&UbuntuMonoBold18px7b);
-    tft.drawString("HOTSPOT INFO", 8, 5);
+    tft.drawString("HOTSPOT INFO", tft.width() / 2, 5);
 
     if (!g_snapshot.valid)
     {
