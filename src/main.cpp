@@ -1022,7 +1022,8 @@ struct FirmwareManifest
     bool     hasSpiffs;
 };
 
-static const char *s_otaLabel = "";
+static const char *s_otaLabel       = "";
+static const char *s_lastDrawnLabel = "";
 
 static String getStoredSpiffsSha256()
 {
@@ -1048,10 +1049,10 @@ static void drawOtaBaseScreen(uint32_t localBuild, uint32_t remoteBuild)
     const uint16_t bannerColor = tft.color565(8, 24, 72);
     tft.fillRect(0, 0, tft.width(), 32, bannerColor);
     tft.drawFastHLine(0, 31, tft.width(), TFT_CYAN);
-    tft.setTextDatum(TL_DATUM);
+    tft.setTextDatum(TC_DATUM);
     tft.setTextColor(TFT_WHITE, bannerColor);
     tft.setFreeFont(&UbuntuMonoBold18px7b);
-    tft.drawString("FIRMWARE UPDATE", 8, 5);
+    tft.drawString("FIRMWARE UPDATE", tft.width() / 2, 5);
 
     char buf[48];
     snprintf(buf, sizeof(buf), "Build %lu  ->  %lu",
