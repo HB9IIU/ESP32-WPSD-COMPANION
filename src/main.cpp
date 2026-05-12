@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <HTTPUpdate.h>
 #include <WiFiClientSecure.h>
 #include <ESPmDNS.h>
 #include <Preferences.h>
@@ -31,7 +32,6 @@ constexpr uint32_t METRIC_HOLD_MS = 5000;
 constexpr uint32_t WS_RECOVERY_INTERVAL_MS = 5000;
 constexpr uint32_t WIFI_RECOVERY_INTERVAL_MS = 10000;
 constexpr uint32_t UPDATE_CHECK_TIMEOUT_MS = 8000;
-constexpr uint32_t UPDATE_NOTICE_DISPLAY_MS = 4500;
 const char *kFirmwareManifestUrl = "https://github.com/HB9IIU/ESP32-WPSD-COMPANION/raw/refs/heads/main/firmware/manifest.json";
 
 struct SnapshotState
@@ -1013,15 +1013,100 @@ void displaySplashScreen()
     TJpgDec.drawFsJpg(0, 0, "/splash_screen.jpg", SPIFFS);
 }
 
-bool fetchRemoteFirmwareBuildNumber(uint32_t &remoteBuildNumber)
+struct FirmwareManifest
 {
-    remoteBuildNumber = 0;
+    uint32_t buildNumber;
+    char     appUrl[192];
+    char     spiffsUrl[192];
+    char     spiffsSha256[65];
+    bool     hasSpiffs;
+};
+
+static const char *s_otaLabel = "";
+
+static String getStoredSpiffsSha256()
+{
+    Preferences prefs;
+    if (!prefs.begin("ota", true)) return "";
+    String sha = prefs.getString("spiffs_sha", "");
+    prefs.end();
+    return sha;
+}
+
+static void saveSpiffsSha256(const String &sha256)
+{
+    Preferences prefs;
+    if (!prefs.begin("ota", false)) return;
+    prefs.putString("spiffs_sha", sha256);
+    prefs.end();
+}
+
+static void drawOtaBaseScreen(uint32_t localBuild, uint32_t remoteBuild)
+{
+    tft.fillScreen(TFT_BLACK);
+
+    const uint16_t bannerColor = tft.color565(8, 24, 72);
+    tft.fillRect(0, 0, tft.width(), 32, bannerColor);
+    tft.drawFastHLine(0, 31, tft.width(), TFT_CYAN);
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(TFT_WHITE, bannerColor);
+    tft.setFreeFont(&UbuntuMonoBold18px7b);
+    tft.drawString("FIRMWARE UPDATE", 8, 5);
+
+    char buf[48];
+    snprintf(buf, sizeof(buf), "Build %lu  ->  %lu",
+             static_cast<unsigned long>(localBuild),
+             static_cast<unsigned long>(remoteBuild));
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(tft.color565(160, 170, 180), TFT_BLACK);
+    tft.setFreeFont(&RobotoCondensedRegular10px7b);
+    tft.drawString(buf, tft.width() / 2, 50);
+
+    tft.setTextColor(tft.color565(200, 60, 40), TFT_BLACK);
+    tft.setFreeFont(&RobotoCondensedBold12px7b);
+    tft.drawString("Do not power off", tft.width() / 2, 210);
+
+    tft.setFreeFont(nullptr);
+    tft.setTextDatum(TL_DATUM);
+}
+
+static void updateOtaProgress(const char *label, int pct)
+{
+    constexpr int kBarX   = 20;
+    constexpr int kBarY   = 120;
+    constexpr int kBarW   = 280;
+    constexpr int kBarH   = 16;
+    constexpr int kLabelY = 82;
+    constexpr int kPctY   = 150;
+
+    tft.fillRect(0, kLabelY - 12, tft.width(), 20, TFT_BLACK);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(tft.color565(240, 210, 120), TFT_BLACK);
+    tft.setFreeFont(&RobotoCondensedBold12px7b);
+    tft.drawString(label, tft.width() / 2, kLabelY);
+
+    const int fill = pct <= 0 ? 0 : (pct >= 100 ? kBarW : kBarW * pct / 100);
+    tft.fillRect(kBarX,        kBarY, fill,        kBarH, tft.color565(0, 180, 100));
+    tft.fillRect(kBarX + fill, kBarY, kBarW - fill, kBarH, tft.color565(20, 20, 30));
+    tft.drawRect(kBarX,        kBarY, kBarW,        kBarH, tft.color565(60, 60, 80));
+
+    char pctBuf[8];
+    snprintf(pctBuf, sizeof(pctBuf), "%d%%", pct);
+    tft.fillRect(0, kPctY - 10, tft.width(), 16, TFT_BLACK);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.setFreeFont(&RobotoCondensedRegular10px7b);
+    tft.drawString(pctBuf, tft.width() / 2, kPctY);
+
+    tft.setFreeFont(nullptr);
+    tft.setTextDatum(TL_DATUM);
+}
+
+static bool fetchManifest(FirmwareManifest &manifest)
+{
+    memset(&manifest, 0, sizeof(manifest));
 
     if (WiFi.status() != WL_CONNECTED)
-    {
-        Serial.println("[Update] Skipping check: WiFi not connected");
         return false;
-    }
 
     WiFiClientSecure client;
     client.setInsecure();
@@ -1030,111 +1115,158 @@ bool fetchRemoteFirmwareBuildNumber(uint32_t &remoteBuildNumber)
     http.setTimeout(UPDATE_CHECK_TIMEOUT_MS);
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 
-    String manifestUrl = kFirmwareManifestUrl;
-    manifestUrl += "?check=";
-    manifestUrl += String(FIRMWARE_BUILD_NUMBER);
-    manifestUrl += "-";
-    manifestUrl += String(micros());
-    Serial.printf("[Update] Manifest URL: %s\n", manifestUrl.c_str());
+    String url = kFirmwareManifestUrl;
+    url += "?build=";
+    url += String(FIRMWARE_BUILD_NUMBER);
+    url += "&t=";
+    url += String(micros());
 
-    if (!http.begin(client, manifestUrl))
-    {
-        Serial.println("[Update] Failed to start manifest request");
+    Serial.printf("[Update] Fetching: %s\n", url.c_str());
+
+    if (!http.begin(client, url))
         return false;
-    }
 
     http.addHeader("Cache-Control", "no-cache");
-    http.addHeader("Pragma", "no-cache");
+    http.addHeader("Pragma",        "no-cache");
 
-    const int httpCode = http.GET();
-    Serial.printf("[Update] Manifest HTTP code: %d\n", httpCode);
-
-    if (httpCode != HTTP_CODE_OK)
+    const int code = http.GET();
+    if (code != HTTP_CODE_OK)
     {
-        Serial.printf("[Update] Manifest request failed: HTTP %d\n", httpCode);
+        Serial.printf("[Update] HTTP %d\n", code);
         http.end();
         return false;
     }
 
     const String payload = http.getString();
     http.end();
-    Serial.printf("[Update] Manifest payload: %s\n", payload.c_str());
 
     JsonDocument doc;
-    DeserializationError error = deserializeJson(doc, payload);
-
-    if (error)
-    {
-        Serial.printf("[Update] Manifest JSON error: %s\n", error.c_str());
+    if (deserializeJson(doc, payload) != DeserializationError::Ok)
         return false;
+
+    manifest.buildNumber = doc["build_number"] | 0;
+    if (manifest.buildNumber == 0)
+        return false;
+
+    for (JsonObjectConst part : doc["update_parts"].as<JsonArrayConst>())
+    {
+        const char *name    = part["name"]   | "";
+        const char *partUrl = part["url"]    | "";
+        const char *sha256  = part["sha256"] | "";
+
+        if (strcmp(name, "app") == 0)
+        {
+            strlcpy(manifest.appUrl, partUrl, sizeof(manifest.appUrl));
+        }
+        else if (strcmp(name, "spiffs") == 0)
+        {
+            strlcpy(manifest.spiffsUrl,    partUrl, sizeof(manifest.spiffsUrl));
+            strlcpy(manifest.spiffsSha256, sha256,  sizeof(manifest.spiffsSha256));
+            manifest.hasSpiffs = true;
+        }
     }
 
-    const uint32_t parsedBuildNumber = doc["build_number"] | 0;
-
-    if (parsedBuildNumber == 0)
-    {
-        Serial.println("[Update] Manifest missing build_number");
-        return false;
-    }
-
-    remoteBuildNumber = parsedBuildNumber;
-    return true;
+    return manifest.appUrl[0] != '\0';
 }
 
-void showFirmwareUpdateNotice(uint32_t remoteBuildNumber)
+static void performOtaUpdate(const FirmwareManifest &manifest)
 {
-    tft.fillScreen(TFT_BLACK);
-    tft.drawRect(8, 8, tft.width() - 16, tft.height() - 16, tft.color565(80, 200, 240));
+    drawOtaBaseScreen(FIRMWARE_BUILD_NUMBER, manifest.buildNumber);
 
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextColor(tft.color565(80, 200, 240), TFT_BLACK);
-    tft.setFreeFont(&RobotoCondensedBold24px7b);
-    tft.drawString("NEW FIRMWARE", tft.width() / 2, 58);
+    httpUpdate.rebootOnUpdate(false);
+    httpUpdate.onProgress([](int cur, int total) {
+        if (total > 0)
+            updateOtaProgress(s_otaLabel, cur * 100 / total);
+    });
 
-    char versionText[40];
-    snprintf(versionText, sizeof(versionText), "Build %lu available", static_cast<unsigned long>(remoteBuildNumber));
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.setFreeFont(&RobotoCondensedRegular16px7b);
-    tft.drawString(versionText, tft.width() / 2, 104);
+    WiFiClientSecure client;
+    client.setInsecure();
 
-    char currentText[48];
-    snprintf(currentText, sizeof(currentText), "Installed build %lu", static_cast<unsigned long>(FIRMWARE_BUILD_NUMBER));
-    tft.setTextColor(tft.color565(165, 175, 185), TFT_BLACK);
-    tft.setFreeFont(&RobotoMonoRegular10px7b);
-    tft.drawString(currentText, tft.width() / 2, 139);
+    // ── SPIFFS (flash first, only if SHA256 changed) ─────────────────
+    if (manifest.hasSpiffs && manifest.spiffsUrl[0] != '\0')
+    {
+        if (getStoredSpiffsSha256() != String(manifest.spiffsSha256))
+        {
+            s_otaLabel = "Updating SPIFFS";
+            updateOtaProgress(s_otaLabel, 0);
+            Serial.printf("[OTA] SPIFFS: %s\n", manifest.spiffsUrl);
 
-    tft.setTextColor(tft.color565(240, 210, 120), TFT_BLACK);
-    tft.setFreeFont(&RobotoCondensedBold12px7b);
-    tft.drawString("Flash via USB / Web Flasher", tft.width() / 2, 184);
+            SPIFFS.end();
+            const t_httpUpdate_return ret =
+                httpUpdate.updateSpiffs(client, String(manifest.spiffsUrl));
 
-    tft.setFreeFont(nullptr);
-    tft.setTextDatum(TL_DATUM);
+            if (ret == HTTP_UPDATE_OK)
+            {
+                saveSpiffsSha256(String(manifest.spiffsSha256));
+                updateOtaProgress("SPIFFS done", 100);
+                Serial.println("[OTA] SPIFFS OK");
+                delay(600);
+            }
+            else
+            {
+                Serial.printf("[OTA] SPIFFS failed: %s\n",
+                              httpUpdate.getLastErrorString().c_str());
+                updateOtaProgress("SPIFFS failed, continuing", 0);
+                delay(1500);
+            }
 
-    delay(UPDATE_NOTICE_DISPLAY_MS);
+            SPIFFS.begin(true);
+        }
+        else
+        {
+            Serial.println("[OTA] SPIFFS unchanged — skipping");
+        }
+    }
+
+    // ── App ──────────────────────────────────────────────────────────
+    s_otaLabel = "Updating firmware";
+    updateOtaProgress(s_otaLabel, 0);
+    Serial.printf("[OTA] App: %s\n", manifest.appUrl);
+
+    const t_httpUpdate_return ret =
+        httpUpdate.update(client, String(manifest.appUrl));
+
+    if (ret == HTTP_UPDATE_OK)
+    {
+        updateOtaProgress("Done  —  rebooting", 100);
+        Serial.println("[OTA] App OK — rebooting");
+        delay(1000);
+        ESP.restart();
+    }
+    else
+    {
+        Serial.printf("[OTA] App failed: %s\n",
+                      httpUpdate.getLastErrorString().c_str());
+        updateOtaProgress("Update failed!", 0);
+        delay(3000);
+    }
 }
 
 void checkForFirmwareUpdateAtBoot()
 {
-    Serial.printf("[Update] Local firmware build: %lu\n", static_cast<unsigned long>(FIRMWARE_BUILD_NUMBER));
+    Serial.printf("[Update] Local build: %lu\n",
+                  static_cast<unsigned long>(FIRMWARE_BUILD_NUMBER));
 
-    uint32_t remoteBuildNumber = 0;
-
-    if (!fetchRemoteFirmwareBuildNumber(remoteBuildNumber))
+    FirmwareManifest manifest;
+    if (!fetchManifest(manifest))
     {
-        Serial.println("[Update] Check unavailable; continuing boot");
+        Serial.println("[Update] Manifest unavailable — continuing boot");
         return;
     }
 
-    Serial.printf("[Update] Remote firmware build: %lu\n", static_cast<unsigned long>(remoteBuildNumber));
+    Serial.printf("[Update] Remote build: %lu\n",
+                  static_cast<unsigned long>(manifest.buildNumber));
 
-    if (remoteBuildNumber > FIRMWARE_BUILD_NUMBER)
+    if (manifest.buildNumber > FIRMWARE_BUILD_NUMBER)
     {
-        Serial.println("[Update] New firmware available");
-        showFirmwareUpdateNotice(remoteBuildNumber);
-        return;
+        Serial.println("[Update] Newer firmware — starting OTA");
+        performOtaUpdate(manifest);
+        Serial.println("[Update] OTA failed — continuing boot");
     }
-
-    Serial.println("[Update] Firmware is current");
+    else
+    {
+        Serial.println("[Update] Firmware is current");
+    }
 }
 
 bool looksLikeCountryCode(const char *countryCode)
