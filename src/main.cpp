@@ -1079,7 +1079,7 @@ static void updateOtaProgress(const char *label, int pct)
     constexpr int kBarW   = 280;
     constexpr int kBarH   = 16;
     constexpr int kLabelY = 82;
-    constexpr int kPctY   = 150;
+    constexpr int kPctY   = 165;
 
     // Only redraw label when it changes — prevents flickering on every progress tick
     if (label != s_lastDrawnLabel)
@@ -1093,7 +1093,7 @@ static void updateOtaProgress(const char *label, int pct)
     }
 
     const int fill = pct <= 0 ? 0 : (pct >= 100 ? kBarW : kBarW * pct / 100);
-    tft.fillRect(kBarX,        kBarY, fill,        kBarH, tft.color565(0, 180, 100));
+    tft.fillRect(kBarX,        kBarY, fill,        kBarH, TFT_GREEN);
     tft.fillRect(kBarX + fill, kBarY, kBarW - fill, kBarH, tft.color565(20, 20, 30));
     tft.drawRect(kBarX,        kBarY, kBarW,        kBarH, tft.color565(60, 60, 80));
 
@@ -2928,10 +2928,10 @@ static void drawDiscoveryScreen()
     const uint16_t bannerColor = tft.color565(8, 24, 72);
     tft.fillRect(0, 0, tft.width(), 32, bannerColor);
     tft.drawFastHLine(0, 31, tft.width(), TFT_CYAN);
-    tft.setTextDatum(TL_DATUM);
+    tft.setTextDatum(TC_DATUM);
     tft.setTextColor(TFT_WHITE, bannerColor);
     tft.setFreeFont(&UbuntuMonoBold18px7b);
-    tft.drawString("WPSD DISCOVERY", 8, 5);
+    tft.drawString("WPSD DISCOVERY", tft.width() / 2, 5);
 
     // Row positions
     kDiscRowY[kDiscStepNvs]      = 48;
