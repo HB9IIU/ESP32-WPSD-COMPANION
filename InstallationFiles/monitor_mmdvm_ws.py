@@ -253,7 +253,7 @@ COUNTRY_NAME_TO_ISO = {
     "Albania": "AL", "Andorra": "AD", "Argentina": "AR",
     "Armenia": "AM", "Australia": "AU", "Austria": "AT",
     "Azerbaijan": "AZ", "Belarus": "BY", "Belgium": "BE",
-    "Bosnia": "BA", "Bosnia and Herzegovina": "BA", "Brazil": "BR", "Bulgaria": "BG",
+    "Bosnia": "BA", "Bosnia and Herzegovina": "BA", "Bosnia and Hercegovina": "BA", "Brazil": "BR", "Bulgaria": "BG",
     "Canada": "CA", "Chile": "CL", "China": "CN",
     "Colombia": "CO", "Croatia": "HR", "Cyprus": "CY",
     "Czech Republic": "CZ", "Denmark": "DK", "Egypt": "EG",
