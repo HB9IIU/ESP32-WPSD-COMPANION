@@ -20,7 +20,7 @@ It connects via WebSocket to a lightweight Python server running on your **WPSD 
   - Duration
 
 - Last heard list
-  - Scrollable list with callsign, name, talkgroup and local time
+  - Up to 10 most recent stations with callsign, name, talkgroup and local time
 
 - Static talkgroups
   - Automatically fetched from BrandMeister API (with names)
@@ -48,6 +48,11 @@ It connects via WebSocket to a lightweight Python server running on your **WPSD 
 
 - Clock synchronization
   - Time and UTC offset initialized from WPSD
+
+- Automatic OTA firmware updates
+  - Checks GitHub for a newer build on every boot
+  - Updates app and SPIFFS filesystem automatically if a new version is available
+  - No action required — the device updates itself silently
 
 ---
 
@@ -176,6 +181,28 @@ The device will erase stored credentials and restart configuration mode.
 
 ---
 
+# Automatic Firmware Updates (OTA)
+
+On every boot, the ESP32 automatically checks GitHub for a newer firmware version.
+
+If a newer build is available:
+
+1. The display shows a **FIRMWARE UPDATE** screen
+2. SPIFFS filesystem is updated first (only if changed)
+3. App firmware is flashed
+4. Device reboots into the new firmware
+
+No action is required from the user.
+
+The update screen shows:
+- Current build number
+- New build number
+- Progress bar and percentage for each stage
+
+Do not power off the device during an update.
+
+---
+
 # 3 — Connect to WPSD via SSH
 
 Many users are not familiar with SSH access to WPSD.
@@ -295,9 +322,9 @@ The installer automatically:
 To update only the Python server script:
 
 ```bash
-sudo curl -fSL https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/InstallationFiles/monitor_mmdvm_ws.py \
+curl -fsSL https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/InstallationFiles/monitor_mmdvm_ws.py \
   -o /home/pi-star/monitor_mmdvm_ws.py \
-  && sudo systemctl restart monitor_mmdvm_ws
+  && sudo systemctl restart monitor_mmdvm_ws.service
 ```
 
 ---
@@ -307,9 +334,9 @@ sudo curl -fSL https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/mai
 Useful commands:
 
 ```bash
-sudo systemctl status monitor_mmdvm_ws
-sudo systemctl restart monitor_mmdvm_ws
-sudo journalctl -u monitor_mmdvm_ws -f
+sudo systemctl status monitor_mmdvm_ws.service
+sudo systemctl restart monitor_mmdvm_ws.service
+sudo journalctl -u monitor_mmdvm_ws.service -f
 ```
 
 ---
