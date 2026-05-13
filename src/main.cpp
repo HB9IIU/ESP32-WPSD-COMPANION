@@ -1331,8 +1331,11 @@ bool displayCountryMapFromFolder(const char *countryCode, const char *sizeFolder
     if (!SPIFFS.exists(assetPath))
     {
         Serial.printf("[TFT] Missing asset: %s\n", assetPath);
-        tft.setTextColor(TFT_RED, TFT_BLACK);
-        tft.drawString(countryCode, x + 4, y + 8, FONT_SIZE);
+        const bool isSmall = (strcmp(sizeFolder, "small") == 0);
+        const char *blankPath = isSmall ? "/flags/small/blank.jpg" : "/flags/large/blank.jpg";
+        if (SPIFFS.exists(blankPath))
+            return TJpgDec.drawFsJpg(x, y, blankPath, SPIFFS);
+        tft.fillRect(x, y, isSmall ? 24 : 56, isSmall ? 17 : 38, TFT_BLACK);
         return false;
     }
 
