@@ -328,7 +328,7 @@ def make_heard_summary_item(record):
     last_seen_unix = 0
     if last_seen_str:
         try:
-            last_seen_unix = int(datetime.strptime(last_seen_str, "%Y-%m-%d %H:%M:%S.%f").timestamp())
+            last_seen_unix = int(datetime.strptime(last_seen_str, "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=timezone.utc).timestamp())
         except ValueError:
             pass
     return {
