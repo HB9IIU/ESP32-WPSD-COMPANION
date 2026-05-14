@@ -119,8 +119,8 @@ struct HeardRecentItem
     char last_seen[32];
     int64_t last_seen_unix;
     char last_tg[32];
-    float last_ber;   // -1 = unknown
-    float last_loss;  // -1 = unknown
+    float last_duration; // -1 = unknown
+    float last_loss;     // -1 = unknown
 };
 
 struct HeardSummaryState
@@ -832,8 +832,8 @@ void parseHeardSummary(JsonDocument &doc)
             copyJsonString(recentItem["last_seen"], item.last_seen, sizeof(item.last_seen));
             item.last_seen_unix = recentItem["last_seen_unix"] | (int64_t)0;
             copyJsonString(recentItem["last_tg"], item.last_tg, sizeof(item.last_tg));
-            item.last_ber  = recentItem["last_ber"].isNull()  ? -1.0f : recentItem["last_ber"].as<float>();
-            item.last_loss = recentItem["last_loss"].isNull() ? -1.0f : recentItem["last_loss"].as<float>();
+            item.last_duration = recentItem["last_duration"].isNull() ? -1.0f : recentItem["last_duration"].as<float>();
+            item.last_loss     = recentItem["last_loss"].isNull()     ? -1.0f : recentItem["last_loss"].as<float>();
         }
     }
 
@@ -2620,11 +2620,11 @@ void drawHeardListBerRow(size_t rowIndex, const HeardRecentItem &item, int rowY)
     tft.setTextColor(tft.color565(190, 190, 190), TFT_BLACK);
     tft.drawString(item.name, kNameX, rowY + 3);
 
-    char berText[12];
-    if (item.last_ber >= 0.0f)
-        snprintf(berText, sizeof(berText), "%.1f%%", item.last_ber);
+    char durText[12];
+    if (item.last_duration >= 0.0f)
+        snprintf(durText, sizeof(durText), "%.1fs", item.last_duration);
     else
-        strlcpy(berText, "--", sizeof(berText));
+        strlcpy(durText, "--", sizeof(durText));
 
     char lossText[12];
     if (item.last_loss >= 0.0f)
@@ -2633,8 +2633,8 @@ void drawHeardListBerRow(size_t rowIndex, const HeardRecentItem &item, int rowY)
         strlcpy(lossText, "--", sizeof(lossText));
 
     tft.setFreeFont(&RobotoMonoRegular10px7b);
-    tft.setTextColor(item.last_ber > 5.0f ? tft.color565(255, 120, 60) : tft.color565(80, 200, 120), TFT_BLACK);
-    tft.drawString(berText, kBerX, rowY + 3);
+    tft.setTextColor(tft.color565(80, 200, 240), TFT_BLACK);
+    tft.drawString(durText, kBerX, rowY + 3);
 
     tft.setTextDatum(TR_DATUM);
     tft.setTextColor(item.last_loss > 10.0f ? tft.color565(255, 120, 60) : tft.color565(80, 200, 120), TFT_BLACK);
@@ -2648,17 +2648,13 @@ void drawHeardListBerPage()
 {
     tft.fillScreen(TFT_BLACK);
 
-    // Header — same style as heard list but with BER/LOSS labels
     const uint16_t bannerColor = tft.color565(8, 24, 72);
-    tft.fillRect(0, 0, tft.width(), 30, bannerColor);
-    tft.drawFastHLine(0, 29, tft.width(), TFT_CYAN);
+    tft.fillRect(0, 0, tft.width(), 32, bannerColor);
+    tft.drawFastHLine(0, 31, tft.width(), TFT_CYAN);
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(TFT_WHITE, bannerColor);
-    tft.setFreeFont(&RobotoCondensedBold12px7b);
-    tft.drawString("LAST HEARD", 8, 9);
-    tft.setFreeFont(&RobotoCondensedRegular10px7b);
-    tft.setTextColor(tft.color565(160, 160, 255), bannerColor);
-    tft.drawString("BER / LOSS", tft.width() - 8 - tft.textWidth("BER / LOSS"), 8);
+    tft.setFreeFont(&UbuntuMonoBold18px7b);
+    tft.drawString("LAST HEARD  DUR/LOSS", 8, 5);
     tft.setFreeFont(nullptr);
     tft.setTextDatum(TL_DATUM);
 

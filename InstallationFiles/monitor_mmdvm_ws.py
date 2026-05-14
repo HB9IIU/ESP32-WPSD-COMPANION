@@ -376,8 +376,6 @@ def make_heard_summary_item(record):
             last_seen_unix = int(datetime.strptime(last_seen_str, "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=timezone.utc).timestamp())
         except ValueError:
             pass
-    ber = record.get("last_ber")
-    loss = record.get("last_loss")
     return {
         "callsign": record.get("callsign", ""),
         "name": record.get("name", ""),
@@ -385,8 +383,8 @@ def make_heard_summary_item(record):
         "last_seen": last_seen_str,
         "last_seen_unix": last_seen_unix,
         "last_tg": record.get("last_tg", ""),
-        "last_ber": ber,
-        "last_loss": loss,
+        "last_loss": record.get("last_loss"),
+        "last_duration": record.get("last_duration"),
     }
 
 
@@ -512,12 +510,12 @@ def update_heard_callsigns_from_live_state():
             callsign = normalize_callsign(fb)
         if callsign and callsign in HEARD_CALLSIGNS:
             rec = HEARD_CALLSIGNS[callsign]
-            ber = LIVE_STATE.get("ber_percent")
             loss = LIVE_STATE.get("packet_loss_percent")
-            if ber is not None:
-                rec["last_ber"] = round(ber, 1)
+            duration = LIVE_STATE.get("duration_sec")
             if loss is not None:
                 rec["last_loss"] = round(loss, 1)
+            if duration is not None:
+                rec["last_duration"] = round(duration, 1)
             rebuild_heard_summary_state()
             return True
         return False
