@@ -119,6 +119,8 @@ struct HeardRecentItem
     char last_seen[32];
     int64_t last_seen_unix;
     char last_tg[32];
+    float last_ber;   // -1 = unknown
+    float last_loss;  // -1 = unknown
 };
 
 struct HeardSummaryState
@@ -204,6 +206,7 @@ void drawTalkgroupSeparators();
 void configureWebSocketClient();
 void onWsEvent(WStype_t type, uint8_t *payload, size_t length);
 void drawHeardListPage();
+void drawHeardListBerPage();
 void drawStaticTgPage();
 void drawHotspotInfoPage();
 void drawOfflinePage();
@@ -687,7 +690,7 @@ void parseSnapshot(JsonDocument &doc)
         updateClockDisplay(true);
         updateFooterStatusDisplay();
     }
-    else if (g_currentPage == 2)
+    else if (g_currentPage == 3)
     {
         drawStaticTgPage();
     }
@@ -829,6 +832,8 @@ void parseHeardSummary(JsonDocument &doc)
             copyJsonString(recentItem["last_seen"], item.last_seen, sizeof(item.last_seen));
             item.last_seen_unix = recentItem["last_seen_unix"] | (int64_t)0;
             copyJsonString(recentItem["last_tg"], item.last_tg, sizeof(item.last_tg));
+            item.last_ber  = recentItem["last_ber"].isNull()  ? -1.0f : recentItem["last_ber"].as<float>();
+            item.last_loss = recentItem["last_loss"].isNull() ? -1.0f : recentItem["last_loss"].as<float>();
         }
     }
 
@@ -839,9 +844,13 @@ void parseHeardSummary(JsonDocument &doc)
         g_lastFooterStatusText[0] = '\0'; // force redraw — flag JPEG rendering can bleed into footer area
         updateFooterStatusDisplay();
     }
-    else
+    else if (g_currentPage == 1)
     {
         drawHeardListPage();
+    }
+    else if (g_currentPage == 2)
+    {
+        drawHeardListBerPage();
     }
     printHeardSummary();
 }
@@ -2585,6 +2594,91 @@ void drawHeardListPage()
     g_page2LastRefreshMs = millis();
 }
 
+void drawHeardListBerRow(size_t rowIndex, const HeardRecentItem &item, int rowY)
+{
+    constexpr int kRowHeight = 20;
+    constexpr int kFlagX     = 4;
+    constexpr int kCallsignX = 34;
+    constexpr int kNameX     = 110;
+    constexpr int kBerX      = 205;
+    constexpr int kLossX     = 315;
+
+    tft.fillRect(0, rowY, tft.width(), kRowHeight, TFT_BLACK);
+    tft.drawFastHLine(0, rowY + kRowHeight - 1, tft.width(), tft.color565(28, 28, 44));
+
+    if (looksLikeCountryCode(item.country_code))
+        displayContryMapSmall(item.country_code, kFlagX, rowY + 1);
+    else
+        displayBlankSmallFlag(kFlagX, rowY + 1);
+
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(TFT_WHITE);
+    tft.setFreeFont(&RobotoCondensedBold12px7b);
+    tft.drawString(item.callsign, kCallsignX, rowY + 2);
+
+    tft.setFreeFont(&RobotoCondensedRegular10px7b);
+    tft.setTextColor(tft.color565(190, 190, 190), TFT_BLACK);
+    tft.drawString(item.name, kNameX, rowY + 3);
+
+    char berText[12];
+    if (item.last_ber >= 0.0f)
+        snprintf(berText, sizeof(berText), "%.1f%%", item.last_ber);
+    else
+        strlcpy(berText, "--", sizeof(berText));
+
+    char lossText[12];
+    if (item.last_loss >= 0.0f)
+        snprintf(lossText, sizeof(lossText), "%.1f%%", item.last_loss);
+    else
+        strlcpy(lossText, "--", sizeof(lossText));
+
+    tft.setFreeFont(&RobotoMonoRegular10px7b);
+    tft.setTextColor(item.last_ber > 5.0f ? tft.color565(255, 120, 60) : tft.color565(80, 200, 120), TFT_BLACK);
+    tft.drawString(berText, kBerX, rowY + 3);
+
+    tft.setTextDatum(TR_DATUM);
+    tft.setTextColor(item.last_loss > 10.0f ? tft.color565(255, 120, 60) : tft.color565(80, 200, 120), TFT_BLACK);
+    tft.drawString(lossText, kLossX, rowY + 3);
+
+    tft.setFreeFont(nullptr);
+    tft.setTextDatum(TL_DATUM);
+}
+
+void drawHeardListBerPage()
+{
+    tft.fillScreen(TFT_BLACK);
+
+    // Header — same style as heard list but with BER/LOSS labels
+    const uint16_t bannerColor = tft.color565(8, 24, 72);
+    tft.fillRect(0, 0, tft.width(), 30, bannerColor);
+    tft.drawFastHLine(0, 29, tft.width(), TFT_CYAN);
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(TFT_WHITE, bannerColor);
+    tft.setFreeFont(&RobotoCondensedBold12px7b);
+    tft.drawString("LAST HEARD", 8, 9);
+    tft.setFreeFont(&RobotoCondensedRegular10px7b);
+    tft.setTextColor(tft.color565(160, 160, 255), bannerColor);
+    tft.drawString("BER / LOSS", tft.width() - 8 - tft.textWidth("BER / LOSS"), 8);
+    tft.setFreeFont(nullptr);
+    tft.setTextDatum(TL_DATUM);
+
+    if (!g_heardSummary.valid || g_heardSummary.recent_count == 0)
+    {
+        tft.setTextDatum(CC_DATUM);
+        tft.setTextColor(tft.color565(120, 120, 120), TFT_BLACK);
+        tft.setFreeFont(&RobotoCondensedRegular16px7b);
+        tft.drawString("No stations heard yet", tft.width() / 2, tft.height() / 2);
+        tft.setFreeFont(nullptr);
+        tft.setTextDatum(TL_DATUM);
+        return;
+    }
+
+    constexpr int kRowHeight = 20;
+    const int startY = 32;
+    for (size_t i = 0; i < g_heardSummary.recent_count; ++i)
+        drawHeardListBerRow(i, g_heardSummary.recent[i], startY + static_cast<int>(i) * kRowHeight);
+}
+
 void switchToPage(int page)
 {
     if (page == g_currentPage)
@@ -2622,10 +2716,14 @@ void switchToPage(int page)
     }
     else if (g_currentPage == 2)
     {
+        drawHeardListBerPage();
+    }
+    else if (g_currentPage == 3)
+    {
         g_staticTgScrollOffset = 0;
         drawStaticTgPage();
     }
-    else if (g_currentPage == 3)
+    else if (g_currentPage == 4)
     {
         drawHotspotInfoPage();
     }
@@ -3383,8 +3481,8 @@ void loop()
         {
             g_lastTouchMs = nowMs;
 
-            // On Static TGs page, bottom strip taps scroll instead of cycling pages
-            if (g_currentPage == 2 && y > (tft.height() - 26) && g_snapshot.static_tg_count > 8)
+            // On Static TGs page (now page 3), bottom strip taps scroll instead of cycling pages
+            if (g_currentPage == 3 && y > (tft.height() - 26) && g_snapshot.static_tg_count > 8)
             {
                 if (x < 100)
                 {
@@ -3399,7 +3497,7 @@ void loop()
             }
             else
             {
-                switchToPage((g_currentPage + 1) % 4);
+                switchToPage((g_currentPage + 1) % 5);
             }
         }
 

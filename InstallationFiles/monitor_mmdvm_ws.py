@@ -376,13 +376,17 @@ def make_heard_summary_item(record):
             last_seen_unix = int(datetime.strptime(last_seen_str, "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=timezone.utc).timestamp())
         except ValueError:
             pass
+    ber = record.get("last_ber")
+    loss = record.get("last_loss")
     return {
         "callsign": record.get("callsign", ""),
         "name": record.get("name", ""),
         "country_code": record.get("country_code", ""),
         "last_seen": last_seen_str,
         "last_seen_unix": last_seen_unix,
-        "last_tg": record.get("last_tg", "")
+        "last_tg": record.get("last_tg", ""),
+        "last_ber": ber,
+        "last_loss": loss,
     }
 
 
@@ -496,6 +500,25 @@ def save_heard_callsigns_file():
 def update_heard_callsigns_from_live_state():
     global HEARD_DB_DIRTY
     global HEARD_DB_PENDING_CHANGES
+
+    # On end events: update BER/loss on the existing heard record if present
+    if LIVE_STATE["last_event"] in ("rf_voice_end", "rf_voice_end_lost", "network_voice_end"):
+        callsign = None
+        cs = LIVE_STATE.get("source_callsign") or ""
+        fb = LIVE_STATE.get("source") or ""
+        if looks_like_real_callsign(cs):
+            callsign = normalize_callsign(cs)
+        elif looks_like_real_callsign(fb):
+            callsign = normalize_callsign(fb)
+        if callsign and callsign in HEARD_CALLSIGNS:
+            rec = HEARD_CALLSIGNS[callsign]
+            ber = LIVE_STATE.get("ber_percent")
+            loss = LIVE_STATE.get("packet_loss_percent")
+            if ber is not None:
+                rec["last_ber"] = round(ber, 1)
+            if loss is not None:
+                rec["last_loss"] = round(loss, 1)
+        return False
 
     if LIVE_STATE["last_event"] not in ("rf_voice_header", "network_voice_header"):
         return False
