@@ -66,7 +66,8 @@ SNAPSHOT_STATE = {
     "service": {
         "state": "",
         "main_pid": 0,
-        "active_since": ""
+        "active_since": "",
+        "uptime_sec": 0
     },
     "config_mtime": "",
     "config_mtime_ago_hours": 0,
@@ -195,6 +196,14 @@ def get_service_main_pid():
 
 def get_service_active_since():
     return run_command(["systemctl", "show", "-p", "ActiveEnterTimestamp", "--value", "mmdvmhost"])
+
+
+def get_system_uptime_sec():
+    try:
+        with open("/proc/uptime", "r") as f:
+            return int(float(f.read().split()[0]))
+    except Exception:
+        return 0
 
 
 def get_config_file_mtime():
@@ -770,6 +779,7 @@ def rebuild_snapshot_state():
     SNAPSHOT_STATE["service"]["state"] = get_service_state()
     SNAPSHOT_STATE["service"]["main_pid"] = get_service_main_pid()
     SNAPSHOT_STATE["service"]["active_since"] = get_service_active_since()
+    SNAPSHOT_STATE["service"]["uptime_sec"] = get_system_uptime_sec()
     SNAPSHOT_STATE["config_mtime"] = format_timestamp_utc(config_mtime)
     SNAPSHOT_STATE["config_mtime_ago_hours"] = calculate_age_hours(config_mtime)
     SNAPSHOT_STATE["current_log_file"] = find_latest_log_file()

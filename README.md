@@ -150,7 +150,7 @@ You can either:
 or
 - Use the web installer:
 
-https://esp32projects.myshack.ch/
+https://wpsd.myshack.ch/
 
 ---
 

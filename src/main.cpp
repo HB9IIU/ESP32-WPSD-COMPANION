@@ -45,6 +45,7 @@ struct SnapshotState
     char service_state[16];
     int service_pid;
     char service_active_since[64];
+    uint32_t system_uptime_sec;
     char config_mtime[32];
     int config_mtime_ago_hours;
     char current_log_file[96];
@@ -640,6 +641,7 @@ void parseSnapshot(JsonDocument &doc)
     copyJsonString(doc["service"]["state"], g_snapshot.service_state, sizeof(g_snapshot.service_state));
     g_snapshot.service_pid = doc["service"]["main_pid"] | 0;
     copyJsonString(doc["service"]["active_since"], g_snapshot.service_active_since, sizeof(g_snapshot.service_active_since));
+    g_snapshot.system_uptime_sec = doc["service"]["uptime_sec"] | (uint32_t)0;
     copyJsonString(doc["config_mtime"], g_snapshot.config_mtime, sizeof(g_snapshot.config_mtime));
     g_snapshot.config_mtime_ago_hours = doc["config_mtime_ago_hours"] | 0;
     copyJsonString(doc["current_log_file"], g_snapshot.current_log_file, sizeof(g_snapshot.current_log_file));
@@ -2992,6 +2994,26 @@ void drawHotspotInfoPage()
         const bool active = (strcmp(state, "active") == 0);
         const uint16_t stateColor = active ? tft.color565(80, 240, 120) : tft.color565(240, 80, 80);
         drawInfoRow(y, "Service", state, stateColor);
+        y += kRowH;
+    }
+
+    // Row 8: System uptime
+    {
+        char uptimeText[32] = "—";
+        if (g_snapshot.system_uptime_sec > 0)
+        {
+            const uint32_t s = g_snapshot.system_uptime_sec;
+            const uint32_t days  = s / 86400;
+            const uint32_t hours = (s % 86400) / 3600;
+            const uint32_t mins  = (s % 3600) / 60;
+            if (days > 0)
+                snprintf(uptimeText, sizeof(uptimeText), "%lud %luh %lum",
+                         (unsigned long)days, (unsigned long)hours, (unsigned long)mins);
+            else
+                snprintf(uptimeText, sizeof(uptimeText), "%luh %lum",
+                         (unsigned long)hours, (unsigned long)mins);
+        }
+        drawInfoRow(y, "Uptime", uptimeText, tft.color565(180, 180, 255));
     }
 
     tft.setFreeFont(nullptr);
