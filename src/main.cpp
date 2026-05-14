@@ -1479,6 +1479,18 @@ const char *currentActivityBannerText()
     return "RX";
 }
 
+static const char *truncateName(const char *name)
+{
+    static char buf[16];
+    if (strlen(name) <= 12)
+    {
+        return name;
+    }
+    memcpy(buf, name, 12);
+    buf[12] = '.'; buf[13] = '.'; buf[14] = '.'; buf[15] = '\0';
+    return buf;
+}
+
 const char *currentRxNameText()
 {
     const char *rxCallsign = currentRxCallsignText();
@@ -1491,10 +1503,10 @@ const char *currentRxNameText()
         g_snapshot.station_callsign[0] != '\0' &&
         strcmp(rxCallsign, g_snapshot.station_callsign) == 0)
     {
-        return g_snapshot.station_name;
+        return truncateName(g_snapshot.station_name);
     }
 
-    return g_live.source_name;
+    return truncateName(g_live.source_name);
 }
 
 void buildRxLocationText(char *destination, size_t destinationSize)
