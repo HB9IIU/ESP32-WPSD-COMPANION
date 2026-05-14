@@ -2600,7 +2600,7 @@ void drawHeardListBerRow(size_t rowIndex, const HeardRecentItem &item, int rowY)
     constexpr int kFlagX     = 4;
     constexpr int kCallsignX = 34;
     constexpr int kNameX     = 110;
-    constexpr int kBerX      = 205;
+    constexpr int kDurX      = 259; // TR_DATUM — 2-char gap before LOSS left edge (~273)
     constexpr int kLossX     = 315;
 
     tft.fillRect(0, rowY, tft.width(), kRowHeight, TFT_BLACK);
@@ -2633,10 +2633,11 @@ void drawHeardListBerRow(size_t rowIndex, const HeardRecentItem &item, int rowY)
         strlcpy(lossText, "--", sizeof(lossText));
 
     tft.setFreeFont(&RobotoMonoRegular10px7b);
-    tft.setTextColor(tft.color565(80, 200, 240), TFT_BLACK);
-    tft.drawString(durText, kBerX, rowY + 3);
-
     tft.setTextDatum(TR_DATUM);
+    tft.setTextColor(tft.color565(80, 200, 240), TFT_BLACK);
+    tft.drawString(durText, kDurX, rowY + 3);
+
+
     tft.setTextColor(item.last_loss > 10.0f ? tft.color565(255, 120, 60) : tft.color565(80, 200, 120), TFT_BLACK);
     tft.drawString(lossText, kLossX, rowY + 3);
 
