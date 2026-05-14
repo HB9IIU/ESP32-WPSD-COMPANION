@@ -2561,7 +2561,7 @@ void drawHeardListRow(size_t rowIndex, const HeardRecentItem &item, int rowY)
 
     tft.setFreeFont(&RobotoCondensedRegular10px7b);
     tft.setTextColor(tft.color565(190, 190, 190), TFT_BLACK);
-    tft.drawString(item.name, kNameX, rowY + 3);
+    tft.drawString(truncateName(item.name), kNameX, rowY + 3);
 
     if (item.last_tg[0] != '\0')
     {
@@ -2632,7 +2632,7 @@ void drawHeardListBerRow(size_t rowIndex, const HeardRecentItem &item, int rowY)
 
     tft.setFreeFont(&RobotoCondensedRegular10px7b);
     tft.setTextColor(tft.color565(190, 190, 190), TFT_BLACK);
-    tft.drawString(item.name, kNameX, rowY + 3);
+    tft.drawString(truncateName(item.name), kNameX, rowY + 3);
 
     char durText[12];
     if (item.last_duration >= 0.0f)
