@@ -1277,7 +1277,7 @@ static void performOtaUpdate(const FirmwareManifest &manifest)
     }
 }
 
-void checkForFirmwareUpdateAtBoot()
+bool checkForFirmwareUpdateAtBoot()
 {
     Serial.printf("[Update] Local build: %lu\n",
                   static_cast<unsigned long>(FIRMWARE_BUILD_NUMBER));
@@ -1286,7 +1286,7 @@ void checkForFirmwareUpdateAtBoot()
     if (!fetchManifest(manifest))
     {
         Serial.println("[Update] Manifest unavailable — continuing boot");
-        return;
+        return false;
     }
 
     Serial.printf("[Update] Remote build: %lu\n",
@@ -1300,12 +1300,14 @@ void checkForFirmwareUpdateAtBoot()
         manifest.buildNumber <= lastOtaBuild)
     {
         Serial.println("[Update] Firmware is current");
+        return true;
     }
     else
     {
         Serial.println("[Update] Newer firmware — starting OTA");
         performOtaUpdate(manifest);
         Serial.println("[Update] OTA failed — continuing boot");
+        return false;
     }
 }
 
@@ -3411,7 +3413,13 @@ void setup()
     updateFooterStatusTextDisplay(wifiStatusText, wifiStatusColor);
     Serial.printf("\nConnected! IP: %s\n", WiFi.localIP().toString().c_str());
 
-    checkForFirmwareUpdateAtBoot();
+    if (checkForFirmwareUpdateAtBoot())
+    {
+        char fwText[48];
+        snprintf(fwText, sizeof(fwText), "Firmware up to date  (build %lu)",
+                 static_cast<unsigned long>(FIRMWARE_BUILD_NUMBER));
+        updateFooterStatusTextDisplay(fwText, tft.color565(100, 220, 100));
+    }
 
     while (!discoverWPSD()); // retries until WPSD host is found
     Serial.printf("[Discovery] Using WPSD host: %s\n", g_wsHost);
