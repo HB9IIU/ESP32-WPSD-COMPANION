@@ -1280,7 +1280,8 @@ static void performOtaUpdate(const FirmwareManifest &manifest)
     }
 }
 
-bool checkForFirmwareUpdateAtBoot()
+// Returns: 1 = firmware current, 0 = OTA triggered, -1 = manifest unavailable
+int8_t checkForFirmwareUpdateAtBoot()
 {
     Serial.printf("[Update] Local build: %lu\n",
                   static_cast<unsigned long>(FIRMWARE_BUILD_NUMBER));
@@ -1289,7 +1290,7 @@ bool checkForFirmwareUpdateAtBoot()
     if (!fetchManifest(manifest))
     {
         Serial.println("[Update] Manifest unavailable — continuing boot");
-        return false;
+        return -1;
     }
 
     Serial.printf("[Update] Remote build: %lu\n",
@@ -1303,14 +1304,14 @@ bool checkForFirmwareUpdateAtBoot()
         manifest.buildNumber <= lastOtaBuild)
     {
         Serial.println("[Update] Firmware is current");
-        return true;
+        return 1;
     }
     else
     {
         Serial.println("[Update] Newer firmware — starting OTA");
         performOtaUpdate(manifest);
         Serial.println("[Update] OTA failed — continuing boot");
-        return false;
+        return 0;
     }
 }
 
@@ -3436,12 +3437,22 @@ void setup()
     updateFooterStatusTextDisplay(wifiStatusText, wifiStatusColor);
     Serial.printf("\nConnected! IP: %s\n", WiFi.localIP().toString().c_str());
 
-    if (checkForFirmwareUpdateAtBoot())
     {
+        const int8_t otaResult = checkForFirmwareUpdateAtBoot();
         char fwText[48];
-        snprintf(fwText, sizeof(fwText), "Firmware up to date  (build %lu)",
-                 static_cast<unsigned long>(FIRMWARE_BUILD_NUMBER));
-        updateFooterStatusTextDisplay(fwText, tft.color565(100, 220, 100));
+        if (otaResult > 0)
+        {
+            snprintf(fwText, sizeof(fwText), "Firmware up to date  (build %lu)",
+                     static_cast<unsigned long>(FIRMWARE_BUILD_NUMBER));
+            updateFooterStatusTextDisplay(fwText, tft.color565(100, 220, 100));
+        }
+        else if (otaResult < 0)
+        {
+            snprintf(fwText, sizeof(fwText), "Update check failed  (build %lu)",
+                     static_cast<unsigned long>(FIRMWARE_BUILD_NUMBER));
+            updateFooterStatusTextDisplay(fwText, tft.color565(200, 200, 80));
+        }
+        // otaResult == 0 means OTA was triggered — device will reboot, no banner needed
     }
 
     while (!discoverWPSD()); // retries until WPSD host is found
