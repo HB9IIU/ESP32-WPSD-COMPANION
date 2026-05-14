@@ -322,10 +322,13 @@ The installer automatically:
 To update only the Python server script:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/InstallationFiles/monitor_mmdvm_ws.py \
+curl -fsSL "https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/InstallationFiles/monitor_mmdvm_ws.py" \
   -o /home/pi-star/monitor_mmdvm_ws.py \
   && sudo systemctl restart monitor_mmdvm_ws.service
 ```
+
+> **Note:** The `-fsSL` flags mean: fail on error (`-f`), silent mode (`-s`), show errors (`-S`), follow redirects (`-L`).
+> To see a progress bar, replace `-fsSL` with `-fL`.
 
 ---
 
