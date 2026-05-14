@@ -518,6 +518,8 @@ def update_heard_callsigns_from_live_state():
                 rec["last_ber"] = round(ber, 1)
             if loss is not None:
                 rec["last_loss"] = round(loss, 1)
+            rebuild_heard_summary_state()
+            return True
         return False
 
     if LIVE_STATE["last_event"] not in ("rf_voice_header", "network_voice_header"):
