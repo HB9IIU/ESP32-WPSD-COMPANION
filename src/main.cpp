@@ -157,6 +157,8 @@ constexpr uint32_t IDLE_BLINK_MS = 200;
 char g_lastFooterStatusText[64] = "";
 bool g_lastFooterSlotValid = false;
 int g_lastFooterSlot = 0;
+char g_firmwareBannerText[52] = "";
+uint16_t g_firmwareBannerColor = 0;
 bool g_lastKnownRssiValid = false;
 int g_lastKnownRssiDbm = 0;
 bool g_lastKnownBerValid = false;
@@ -3118,6 +3120,14 @@ static void drawDiscoveryScreen()
         tft.drawString(labels[i], 8, kDiscRowY[i]);
     }
 
+    if (g_firmwareBannerText[0])
+    {
+        tft.setFreeFont(&RobotoCondensedRegular10px7b);
+        tft.setTextDatum(TC_DATUM);
+        tft.setTextColor(g_firmwareBannerColor, TFT_BLACK);
+        tft.drawString(g_firmwareBannerText, tft.width() / 2, 226);
+    }
+
     tft.setFreeFont(nullptr);
     tft.setTextDatum(TL_DATUM);
     kDiscScreenUp = true;
@@ -3439,20 +3449,21 @@ void setup()
 
     {
         const int8_t otaResult = checkForFirmwareUpdateAtBoot();
-        char fwText[48];
         if (otaResult > 0)
         {
-            snprintf(fwText, sizeof(fwText), "Firmware up to date  (build %lu)",
+            snprintf(g_firmwareBannerText, sizeof(g_firmwareBannerText),
+                     "Firmware up to date  (build %lu)",
                      static_cast<unsigned long>(FIRMWARE_BUILD_NUMBER));
-            updateFooterStatusTextDisplay(fwText, tft.color565(100, 220, 100));
+            g_firmwareBannerColor = tft.color565(100, 220, 100);
         }
         else if (otaResult < 0)
         {
-            snprintf(fwText, sizeof(fwText), "Update check failed  (build %lu)",
+            snprintf(g_firmwareBannerText, sizeof(g_firmwareBannerText),
+                     "Update check failed  (build %lu)",
                      static_cast<unsigned long>(FIRMWARE_BUILD_NUMBER));
-            updateFooterStatusTextDisplay(fwText, tft.color565(200, 200, 80));
+            g_firmwareBannerColor = tft.color565(200, 200, 80);
         }
-        // otaResult == 0 means OTA was triggered — device will reboot, no banner needed
+        // otaResult == 0 means OTA triggered — device reboots, no banner needed
     }
 
     while (!discoverWPSD()); // retries until WPSD host is found
