@@ -189,6 +189,7 @@ namespace HB9IIUPortal
         Serial.printf("[HB9IIUPortal] 🔌 Connecting to WiFi: %s", ssid.c_str());
 
         WiFi.mode(WIFI_STA);
+        delay(500); // let radio hardware stabilize after mode switch (esp. after disconnect(true))
 
         // If a hostname was provided in begin(), apply it before connecting
         if (g_hostname.length())
@@ -198,9 +199,9 @@ namespace HB9IIUPortal
 
         WiFi.begin(ssid.c_str(), pass.c_str());
 
-        // Wait up to ~6s; print status code each second for diagnostics
+        // Wait up to ~15s; print status code on change for diagnostics
         uint8_t lastStatus = 255;
-        for (int i = 0; i < 20; ++i)
+        for (int i = 0; i < 50; ++i)
         {
             uint8_t s = WiFi.status();
             if (s == WL_CONNECTED)
@@ -219,7 +220,7 @@ namespace HB9IIUPortal
                     WiFi.disconnect(true, false);
                     return false;
                 }
-                delay(200); // brief settle for lwIP default-route registration
+                delay(1000); // wait for lwIP default-route + DNS to fully register
                 return true;
             }
             if (i % 3 == 0 || s != lastStatus)
