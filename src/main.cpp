@@ -27,7 +27,7 @@ static char g_wsHost[40] = "";
 
 constexpr size_t MAX_CONFIG_JSON_LENGTH = 8192;
 constexpr size_t MAX_RSSI_VALUES = 16;
-constexpr size_t MAX_HEARD_RECENT_ITEMS = 10;
+constexpr size_t MAX_HEARD_RECENT_ITEMS = 20;
 constexpr size_t MAX_STATIC_TGS = 20;
 constexpr uint32_t METRIC_HOLD_MS = 5000;
 constexpr uint32_t WS_RECOVERY_INTERVAL_MS = 5000;

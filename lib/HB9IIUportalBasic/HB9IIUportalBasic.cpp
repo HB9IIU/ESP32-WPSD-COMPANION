@@ -253,24 +253,27 @@ namespace HB9IIUPortal
             Serial.printf("\n✅ [HB9IIUPortal] GOT_IP: %s  GW: %s — probing route...",
                           WiFi.localIP().toString().c_str(), gw.toString().c_str());
 
-            // ARDUINO_EVENT_WIFI_STA_GOT_IP can fire before lwIP finishes writing
-            // the routing table. UDP sendto() to the gateway returns ENETUNREACH
-            // immediately when no route exists, so spin here until it goes through.
+            // Verify the default route is truly installed by TCP-connecting to
+            // 8.8.8.8:53.  ENETUNREACH fires in <1ms when the route is missing;
+            // a real connection (or any other errno) means the route is up.
+            // Print errno so we can see what the probe is actually getting.
             bool routeOk = false;
+            const IPAddress probeIP(8, 8, 8, 8);
             for (int p = 0; p < 25 && !routeOk; p++)
             {
-                WiFiUDP udp;
-                uint8_t dummy = 0;
-                udp.beginPacket(gw, 9); // port 9 = discard (RFC 863)
-                udp.write(&dummy, 1);
-                routeOk = (udp.endPacket() == 1);
-                udp.stop();
-                if (!routeOk) delay(200);
+                WiFiClient c;
+                bool connected = c.connect(probeIP, 53, 2000);
+                int e = errno;
+                c.stop();
+                Serial.printf("[probe %d] connected=%d errno=%d\n", p, (int)connected, e);
+                // Only accept an actual TCP connection as proof — timeout is ambiguous
+                routeOk = connected;
+                if (!routeOk) delay(100);
             }
 
             if (!routeOk)
             {
-                Serial.println("\n⚠️ [HB9IIUPortal] Route probe timed out — retrying WiFi.");
+                Serial.println("⚠️ [HB9IIUPortal] Route probe failed — retrying WiFi.");
                 WiFi.disconnect(true, false);
                 return false;
             }
