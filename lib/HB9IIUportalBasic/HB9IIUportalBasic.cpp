@@ -212,7 +212,7 @@ namespace HB9IIUPortal
         }
 
         Serial.println("\n❌ [HB9IIUPortal] Failed to connect to saved WiFi.");
-        WiFi.disconnect(false, false); // clean up STA state before next retry
+        WiFi.disconnect(true, false); // turn off radio between retries to reset stack state
 
         // --- Show failed connection message; caller will retry ---
         tft.setRotation(1);
