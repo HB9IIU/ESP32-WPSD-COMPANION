@@ -206,21 +206,26 @@ namespace HB9IIUPortal
             uint8_t s = WiFi.status();
             if (s == WL_CONNECTED)
             {
-                // Wait for DHCP to assign a real IP (lwIP routing table not ready until then)
-                for (int j = 0; j < 20 && WiFi.localIP() == IPAddress(0, 0, 0, 0); ++j)
+                // Wait for full DHCP lease: need both IP and gateway before routing works
+                for (int j = 0; j < 30; ++j)
                 {
+                    if (WiFi.localIP() != IPAddress(0, 0, 0, 0) &&
+                        WiFi.gatewayIP() != IPAddress(0, 0, 0, 0))
+                        break;
                     Serial.print("~");
                     delay(200);
                 }
-                IPAddress ip = WiFi.localIP();
-                Serial.printf("\n✅ [HB9IIUPortal] Connected! IP: %s\n", ip.toString().c_str());
-                if (ip == IPAddress(0, 0, 0, 0))
+                IPAddress ip  = WiFi.localIP();
+                IPAddress gw  = WiFi.gatewayIP();
+                Serial.printf("\n✅ [HB9IIUPortal] Connected! IP: %s  GW: %s\n",
+                              ip.toString().c_str(), gw.toString().c_str());
+                if (ip == IPAddress(0, 0, 0, 0) || gw == IPAddress(0, 0, 0, 0))
                 {
-                    Serial.println("⚠️ [HB9IIUPortal] No IP after connect — treating as failure.");
+                    Serial.println("⚠️ [HB9IIUPortal] DHCP incomplete (no gateway) — retrying.");
                     WiFi.disconnect(true, false);
                     return false;
                 }
-                delay(1000); // wait for lwIP default-route + DNS to fully register
+                delay(300); // brief settle before first socket call
                 return true;
             }
             if (i % 3 == 0 || s != lastStatus)
