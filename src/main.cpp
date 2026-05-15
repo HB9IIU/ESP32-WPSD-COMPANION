@@ -138,6 +138,7 @@ struct HeardSummaryState
 
 WebSocketsClient ws;
 bool g_clockInitialized = false;
+bool g_wifiStressTest = false; // set true to reboot 3s after first successful WS+clock boot
 int g_clockUtcOffsetSec = 0;
 char g_lastClockText[6] = "";
 char g_lastRxCallsignText[24] = "";
@@ -563,6 +564,13 @@ void initializeClockFromSnapshot()
     Serial.printf("[TIME] Clock initialized from snapshot: %lld (%s)\n",
                   static_cast<long long>(g_snapshot.server_time_unix),
                   g_snapshot.server_time_iso);
+
+    if (g_wifiStressTest)
+    {
+        Serial.println("[STRESS] WS+clock ready — rebooting in 3s...");
+        delay(3000);
+        ESP.restart();
+    }
 }
 
 void buildClockText(char *destination, size_t destinationSize)

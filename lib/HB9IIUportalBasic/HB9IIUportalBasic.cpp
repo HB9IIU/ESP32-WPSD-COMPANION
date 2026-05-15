@@ -217,6 +217,8 @@ namespace HB9IIUPortal
                 }
                 IPAddress ip  = WiFi.localIP();
                 IPAddress gw  = WiFi.gatewayIP();
+                IPAddress sub = WiFi.subnetMask();
+                IPAddress dns = WiFi.dnsIP(0);
                 Serial.printf("\n✅ [HB9IIUPortal] Connected! IP: %s  GW: %s\n",
                               ip.toString().c_str(), gw.toString().c_str());
                 if (ip == IPAddress(0, 0, 0, 0) || gw == IPAddress(0, 0, 0, 0))
@@ -225,7 +227,12 @@ namespace HB9IIUPortal
                     WiFi.disconnect(true, false);
                     return false;
                 }
-                delay(300); // brief settle before first socket call
+                // Force a synchronous lwIP routing-table update.
+                // WiFi.gatewayIP() can be non-zero while the lwIP default route is
+                // still pending — calling config() commits the values to the stack
+                // immediately, preventing ENETUNREACH on the first socket call.
+                WiFi.config(ip, gw, sub, dns);
+                delay(100);
                 return true;
             }
             if (i % 3 == 0 || s != lastStatus)
