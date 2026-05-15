@@ -198,20 +198,41 @@ namespace HB9IIUPortal
 
         WiFi.begin(ssid.c_str(), pass.c_str());
 
-        // Wait up to ~10s (dots on serial only — TFT already shows main.cpp content)
+        // Wait up to ~6s; print status code each second for diagnostics
+        uint8_t lastStatus = 255;
         for (int i = 0; i < 20; ++i)
         {
-            if (WiFi.status() == WL_CONNECTED)
+            uint8_t s = WiFi.status();
+            if (s == WL_CONNECTED)
             {
                 Serial.println();
                 Serial.println("✅ [HB9IIUPortal] Connected to WiFi!");
                 return true;
             }
-            Serial.print(".");
+            if (i % 3 == 0 || s != lastStatus)
+            {
+                // Print human-readable status every ~900ms or on change
+                const char *label = "UNKNOWN";
+                switch (s)
+                {
+                case WL_IDLE_STATUS:      label = "IDLE";          break;
+                case WL_NO_SSID_AVAIL:   label = "NO_SSID_AVAIL"; break;
+                case WL_SCAN_COMPLETED:  label = "SCAN_COMPLETED"; break;
+                case WL_CONNECT_FAILED:  label = "CONNECT_FAILED"; break;
+                case WL_CONNECTION_LOST: label = "CONNECT_LOST";   break;
+                case WL_DISCONNECTED:    label = "DISCONNECTED";   break;
+                }
+                Serial.printf(" [%d=%s]", s, label);
+                lastStatus = s;
+            }
+            else
+            {
+                Serial.print(".");
+            }
             delay(300);
         }
 
-        Serial.println("\n❌ [HB9IIUPortal] Failed to connect to saved WiFi.");
+        Serial.printf("\n❌ [HB9IIUPortal] Failed. Last status: %d\n", WiFi.status());
         WiFi.disconnect(true, false); // turn off radio between retries to reset stack state
 
         // --- Show failed connection message; caller will retry ---
