@@ -12,47 +12,61 @@ It connects via WebSocket to a lightweight Python server running on your **WPSD 
 - Live DMR activity
   - Callsign
   - Name
+  - City / state / country
   - Country flag
   - Talkgroup
   - Slot
   - BER
   - RSSI
+  - Packet loss
   - Duration
+  - Live RX / TX / idle status
 
 - Last heard list
-  - Up to 10 most recent stations with callsign, name, talkgroup and local time
+  - Recent stations with callsign, name, flag, talkgroup and local time
+  - Separate duration / packet-loss view
 
 - Static talkgroups
-  - Automatically fetched from BrandMeister API (with names)
+  - Loaded from the WPSD server with resolved names
+  - Scrollable on the touchscreen when more entries are configured
 
 - Hotspot information page
+  - Callsign and DMR ID
   - Operator
   - QTH
   - RX frequency
   - TX frequency
   - Colour code
   - Service status
+  - System uptime
 
 - Touch navigation
   - Tap screen to cycle through pages
-  - Static TG page supports scrolling
+  - On the Static TG page, tap the bottom bar to scroll up/down
 
 - Automatic hotspot discovery
-  - Saved IP address
+  - Last working IP address saved in NVS
   - mDNS (`wpsd.local`)
   - Automatic LAN scan fallback
+  - On-screen discovery status and retry countdown
 
 - Captive portal Wi-Fi setup
   - Automatic Wi-Fi configuration portal
   - Credentials saved in flash memory
+  - QR code shown on the CYD screen for quick phone setup
 
 - Clock synchronization
   - Time and UTC offset initialized from WPSD
 
 - Automatic OTA firmware updates
   - Checks GitHub for a newer build on every boot
-  - Updates app and SPIFFS filesystem automatically if a new version is available
+  - Updates app firmware automatically if a new version is available
+  - Updates SPIFFS only when the filesystem image checksum changed
   - No action required — the device updates itself silently
+
+- Offline/reconnect handling
+  - Shows a hotspot offline screen when the WebSocket disconnects
+  - Reconnects Wi-Fi and WebSocket automatically
 
 ---
 
@@ -61,9 +75,10 @@ It connects via WebSocket to a lightweight Python server running on your **WPSD 
 | Page | Description |
 |------|-------------|
 | 0 — Live | Real-time QSO details + recent activity |
-| 1 — Last Heard | Last 10 stations |
-| 2 — Static TGs | Configured talkgroups with names |
-| 3 — Hotspot Info | Device and network configuration |
+| 1 — Last Heard | Recent stations, talkgroup and local time |
+| 2 — Last Heard DUR/LOSS | Recent stations with last duration and packet loss |
+| 3 — Static TGs | Configured talkgroups with names; bottom bar scrolls when needed |
+| 4 — Hotspot Info | Callsign, DMR ID, operator, QTH, RF settings, service and uptime |
 
 ---
 
@@ -82,7 +97,8 @@ ESP32 CYD
   └── Firmware (PlatformIO)
         ├── Connects to WebSocket server
         ├── Parses JSON messages
-        ├── Auto-discovers hotspot
+        ├── Auto-discovers hotspot (NVS cache → mDNS → LAN scan)
+        ├── Checks GitHub firmware manifest for OTA updates
         └── Renders UI on TFT display
 ```
 
@@ -91,13 +107,13 @@ ESP32 CYD
 # JSON Message Types
 
 - `snapshot`
-  - Configuration + static data
+  - Configuration, service status, RadioID metadata, station identity, static talkgroups, server time and UTC offset
 
 - `live`
-  - Real-time DMR activity
+  - Real-time DMR activity, callsign lookup, talkgroup, BER, RSSI, packet loss and duration
 
 - `heard_summary`
-  - Last heard stations
+  - Recent stations with last heard time, last talkgroup, last duration and last packet loss
 
 ---
 
@@ -161,12 +177,16 @@ On first boot the ESP32 automatically creates a Wi-Fi configuration portal.
 Connect your phone or computer to:
 
 ```text
-esp32-wpsd
+WPSD-Setup
 ```
+
+The CYD screen also shows a QR code for this open setup network.
 
 Then open the captive portal page and enter your Wi-Fi credentials.
 
 Credentials are stored in flash memory.
+
+The ESP32 uses `esp32-wpsd` as its hostname after Wi-Fi is configured.
 
 ---
 
@@ -179,6 +199,8 @@ To erase saved Wi-Fi settings:
 
 The device will erase stored credentials and restart configuration mode.
 
+If saved credentials exist but Wi-Fi cannot connect, the firmware keeps retrying. You can also hold the touchscreen for about 3 seconds on the error/retry screen to erase saved credentials and return to setup mode.
+
 ---
 
 # Automatic Firmware Updates (OTA)
@@ -188,11 +210,13 @@ On every boot, the ESP32 automatically checks GitHub for a newer firmware versio
 If a newer build is available:
 
 1. The display shows a **FIRMWARE UPDATE** screen
-2. SPIFFS filesystem is updated first (only if changed)
+2. SPIFFS filesystem is updated first, but only when its SHA-256 checksum changed
 3. App firmware is flashed
 4. Device reboots into the new firmware
 
 No action is required from the user.
+
+If the manifest cannot be reached, the device continues booting and shows an update-check-failed banner with the current build number.
 
 The update screen shows:
 - Current build number
