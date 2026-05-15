@@ -1,6 +1,7 @@
 #include "HB9IIUportalBasic.h"
 
 #include <WiFi.h>
+#include <WiFiUdp.h>
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <Preferences.h>
@@ -29,6 +30,7 @@ namespace HB9IIUPortal
     static bool inAPmode = false;
     static bool connected = false;
     static bool s_credentialsExist = false; // true when NVS has ssid+pass (even if connection failed)
+    static volatile bool s_gotIp = false;  // set by ARDUINO_EVENT_WIFI_STA_GOT_IP callback
 
     // Optional hostname for STA + mDNS
     static String g_hostname;
@@ -189,7 +191,7 @@ namespace HB9IIUPortal
         Serial.printf("[HB9IIUPortal] 🔌 Connecting to WiFi: %s", ssid.c_str());
 
         WiFi.mode(WIFI_STA);
-        delay(500); // let radio hardware stabilize after mode switch (esp. after disconnect(true))
+        delay(500); // let radio hardware stabilize after mode switch / disconnect(true)
 
         // If a hostname was provided in begin(), apply it before connecting
         if (g_hostname.length())
@@ -197,53 +199,33 @@ namespace HB9IIUPortal
             WiFi.setHostname(g_hostname.c_str());
         }
 
+        // Listen for the GOT_IP event — this fires AFTER DHCP has committed the
+        // default route into lwIP, which is the only reliable signal that sockets work.
+        // Polling WiFi.localIP() / gatewayIP() is NOT sufficient: those values can be
+        // non-zero (cached from the previous session) before the new DHCP completes.
+        s_gotIp = false;
+        wifi_event_id_t evId = WiFi.onEvent(
+            [](WiFiEvent_t) { s_gotIp = true; },
+            ARDUINO_EVENT_WIFI_STA_GOT_IP);
+
         WiFi.begin(ssid.c_str(), pass.c_str());
 
-        // Wait up to ~15s; print status code on change for diagnostics
+        // Wait up to ~15 s; print status code on change for diagnostics
         uint8_t lastStatus = 255;
         for (int i = 0; i < 50; ++i)
         {
+            if (s_gotIp) break;
+
             uint8_t s = WiFi.status();
-            if (s == WL_CONNECTED)
+            if (s != lastStatus || i % 3 == 0)
             {
-                // Wait for full DHCP lease: need both IP and gateway before routing works
-                for (int j = 0; j < 30; ++j)
-                {
-                    if (WiFi.localIP() != IPAddress(0, 0, 0, 0) &&
-                        WiFi.gatewayIP() != IPAddress(0, 0, 0, 0))
-                        break;
-                    Serial.print("~");
-                    delay(200);
-                }
-                IPAddress ip  = WiFi.localIP();
-                IPAddress gw  = WiFi.gatewayIP();
-                IPAddress sub = WiFi.subnetMask();
-                IPAddress dns = WiFi.dnsIP(0);
-                Serial.printf("\n✅ [HB9IIUPortal] Connected! IP: %s  GW: %s\n",
-                              ip.toString().c_str(), gw.toString().c_str());
-                if (ip == IPAddress(0, 0, 0, 0) || gw == IPAddress(0, 0, 0, 0))
-                {
-                    Serial.println("⚠️ [HB9IIUPortal] DHCP incomplete (no gateway) — retrying.");
-                    WiFi.disconnect(true, false);
-                    return false;
-                }
-                // Force a synchronous lwIP routing-table update.
-                // WiFi.gatewayIP() can be non-zero while the lwIP default route is
-                // still pending — calling config() commits the values to the stack
-                // immediately, preventing ENETUNREACH on the first socket call.
-                WiFi.config(ip, gw, sub, dns);
-                delay(100);
-                return true;
-            }
-            if (i % 3 == 0 || s != lastStatus)
-            {
-                // Print human-readable status every ~900ms or on change
                 const char *label = "UNKNOWN";
                 switch (s)
                 {
                 case WL_IDLE_STATUS:      label = "IDLE";          break;
                 case WL_NO_SSID_AVAIL:   label = "NO_SSID_AVAIL"; break;
                 case WL_SCAN_COMPLETED:  label = "SCAN_COMPLETED"; break;
+                case WL_CONNECTED:       label = "CONNECTED";      break;
                 case WL_CONNECT_FAILED:  label = "CONNECT_FAILED"; break;
                 case WL_CONNECTION_LOST: label = "CONNECT_LOST";   break;
                 case WL_DISCONNECTED:    label = "DISCONNECTED";   break;
@@ -258,8 +240,44 @@ namespace HB9IIUPortal
             delay(300);
         }
 
-        Serial.printf("\n❌ [HB9IIUPortal] Failed. Last status: %d\n", WiFi.status());
-        WiFi.disconnect(true, false); // turn off radio between retries to reset stack state
+        WiFi.removeEvent(evId);
+
+        if (!s_gotIp)
+        {
+            Serial.printf("\n❌ [HB9IIUPortal] Failed (no GOT_IP). Last status: %d\n", WiFi.status());
+            WiFi.disconnect(true, false);
+        }
+        else
+        {
+            IPAddress gw = WiFi.gatewayIP();
+            Serial.printf("\n✅ [HB9IIUPortal] GOT_IP: %s  GW: %s — probing route...",
+                          WiFi.localIP().toString().c_str(), gw.toString().c_str());
+
+            // ARDUINO_EVENT_WIFI_STA_GOT_IP can fire before lwIP finishes writing
+            // the routing table. UDP sendto() to the gateway returns ENETUNREACH
+            // immediately when no route exists, so spin here until it goes through.
+            bool routeOk = false;
+            for (int p = 0; p < 25 && !routeOk; p++)
+            {
+                WiFiUDP udp;
+                uint8_t dummy = 0;
+                udp.beginPacket(gw, 9); // port 9 = discard (RFC 863)
+                udp.write(&dummy, 1);
+                routeOk = (udp.endPacket() == 1);
+                udp.stop();
+                if (!routeOk) delay(200);
+            }
+
+            if (!routeOk)
+            {
+                Serial.println("\n⚠️ [HB9IIUPortal] Route probe timed out — retrying WiFi.");
+                WiFi.disconnect(true, false);
+                return false;
+            }
+
+            Serial.println(" OK");
+            return true;
+        }
 
         // --- Show failed connection message; caller will retry ---
         tft.setRotation(1);

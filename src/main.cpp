@@ -138,7 +138,7 @@ struct HeardSummaryState
 
 WebSocketsClient ws;
 bool g_clockInitialized = false;
-bool g_wifiStressTest = false; // set true to reboot 3s after first successful WS+clock boot
+bool g_wifiStressTest = true; // set true to reboot 3s after first successful WS+clock boot
 int g_clockUtcOffsetSec = 0;
 char g_lastClockText[6] = "";
 char g_lastRxCallsignText[24] = "";
