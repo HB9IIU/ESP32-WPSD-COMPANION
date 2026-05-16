@@ -1441,10 +1441,7 @@ void drawTopCallsignFontDemo(const char *callsign)
     tft.setFreeFont(&RobotoMonoRegular12px7b);
     tft.drawString("DMR", sideMargin, sideTextY);
 
-    // Center callsign between the "DMR" label and the clock area (clock starts at x=226)
-    constexpr int kClockAreaLeft = 226;
-    constexpr int kDmrLabelEnd = 36;
-    constexpr int kTextCenterX = (kDmrLabelEnd + kClockAreaLeft) / 2; // ~131
+    const int kTextCenterX = tft.width() / 2;
     tft.setTextDatum(TC_DATUM);
     tft.setTextColor(TFT_WHITE, bannerColor);
     tft.setFreeFont(&UbuntuMonoBold18px7b);
