@@ -1,9 +1,9 @@
 {
-  "build_number": 144,
-  "build_time": "2026-05-16T16:36:55.618815+00:00",
+  "build_number": 145,
+  "build_time": "2026-05-16T16:39:39.459709+00:00",
   "firmware": "firmware.bin",
   "size": 4194304,
-  "sha256": "c9bf0a0cbd5c5cb2873d03c03583b1d6302a70c97d0f84e253977519bd188ea2",
+  "sha256": "238324b48532b90ad64848c1c2ed795c09ea7dac34dceacf39b5663e48012cc8",
   "url": "https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/firmware/firmware.bin",
   "update_parts": [
     {
@@ -11,7 +11,7 @@
       "firmware": "app.bin",
       "offset": 65536,
       "size": 1251200,
-      "sha256": "eed616aa7f2b79f6835a241d1bb407783fd28c80e1b737b9df17b2e7569323ca",
+      "sha256": "7f535e8f06eb0be0c1380729b5682d205aaec5a9ad4ff4af4168d4c157746f9c",
       "url": "https://raw.githubusercontent.com/HB9IIU/ESP32-WPSD-COMPANION/main/firmware/app.bin"
     },
     {
