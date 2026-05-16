@@ -1234,7 +1234,7 @@ static void performOtaUpdate(const FirmwareManifest &manifest)
     {
         if (getStoredSpiffsSha256() != String(manifest.spiffsSha256))
         {
-            s_otaLabel = "Updating SPIFFS";
+            s_otaLabel = "Updating display files";
             updateOtaProgress(s_otaLabel, 0);
             Serial.printf("[OTA] SPIFFS: %s\n", manifest.spiffsUrl);
 
@@ -1245,7 +1245,7 @@ static void performOtaUpdate(const FirmwareManifest &manifest)
             if (ret == HTTP_UPDATE_OK)
             {
                 saveSpiffsSha256(String(manifest.spiffsSha256));
-                updateOtaProgress("SPIFFS done", 100);
+                updateOtaProgress("Display files updated", 100);
                 Serial.println("[OTA] SPIFFS OK");
                 delay(600);
             }
@@ -1253,7 +1253,7 @@ static void performOtaUpdate(const FirmwareManifest &manifest)
             {
                 Serial.printf("[OTA] SPIFFS failed: %s\n",
                               httpUpdate.getLastErrorString().c_str());
-                updateOtaProgress("SPIFFS failed, continuing", 0);
+                updateOtaProgress("Display files failed, continuing", 0);
                 delay(1500);
             }
 
