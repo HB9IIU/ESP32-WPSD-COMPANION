@@ -1100,6 +1100,7 @@ static void runColorCalibrationIfNeeded()
     }
 
     bool currentInvert = false;
+    tft.invertDisplay(false); // establish known INVOFF baseline so saved value is absolute
     drawColorCalibrationScreen();
 
     while (true)
