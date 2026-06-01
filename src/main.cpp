@@ -1035,6 +1035,108 @@ void displaySplashScreen()
     TJpgDec.drawFsJpg(0, 0, "/splash_screen.jpg", SPIFFS);
 }
 
+static void drawColorCalibrationScreen()
+{
+    const int W  = tft.width();   // 320
+    const int H  = tft.height();  // 240
+
+    tft.fillScreen(TFT_BLACK);
+
+    // Title bar
+    tft.fillRect(0, 0, W, 30, tft.color565(30, 30, 30));
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(&RobotoCondensedBold12px7b);
+    tft.setTextColor(TFT_WHITE, tft.color565(30, 30, 30));
+    tft.drawString("DISPLAY COLOUR CHECK", W / 2, 15);
+
+    // Big RED swatch in the centre of the screen
+    const int swatchX = W / 2 - 60;
+    const int swatchY = 40;
+    const int swatchW = 120;
+    const int swatchH = 70;
+    tft.fillRect(swatchX, swatchY, swatchW, swatchH, TFT_RED);
+    tft.drawRect(swatchX - 1, swatchY - 1, swatchW + 2, swatchH + 2, TFT_WHITE);
+
+    // Question
+    tft.setFreeFont(&RobotoCondensedBold12px7b);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.drawString("Is the box above RED?", W / 2, 126);
+
+    // YES button — left half bottom area
+    const int btnY = 148;
+    const int btnH = 70;
+    tft.fillRect(4,       btnY, W / 2 - 8, btnH, tft.color565(0, 160, 0));
+    tft.fillRect(W / 2 + 4, btnY, W / 2 - 8, btnH, tft.color565(180, 0, 0));
+    tft.drawRect(4,       btnY, W / 2 - 8, btnH, TFT_WHITE);
+    tft.drawRect(W / 2 + 4, btnY, W / 2 - 8, btnH, TFT_WHITE);
+
+    tft.setFreeFont(&RobotoCondensedBold24px7b);
+    tft.setTextColor(TFT_WHITE, tft.color565(0, 160, 0));
+    tft.drawString("YES", W / 4, btnY + btnH / 2);
+
+    tft.setTextColor(TFT_WHITE, tft.color565(180, 0, 0));
+    tft.drawString("NO", W * 3 / 4, btnY + btnH / 2);
+
+    tft.setFreeFont(nullptr);
+    tft.setTextDatum(TL_DATUM);
+}
+
+static void runColorCalibrationIfNeeded()
+{
+    {
+        Preferences prefs;
+        if (prefs.begin("display", true))
+        {
+            bool confirmed = prefs.getBool("col_ok", false);
+            bool invert    = prefs.getBool("invert", false);
+            prefs.end();
+            if (confirmed)
+            {
+                tft.invertDisplay(invert);
+                return;
+            }
+        }
+    }
+
+    bool currentInvert = false;
+    drawColorCalibrationScreen();
+
+    while (true)
+    {
+        if (!touchscreen.tirqTouched() || !touchscreen.touched()) continue;
+        delay(40);
+        if (!touchscreen.touched()) continue;
+
+        TS_Point p = touchscreen.getPoint();
+        int tx = map(p.x, 200, 3700, 1, tft.width());
+        int ty = map(p.y, 240, 3800, 1, tft.height());
+
+        // Only react to taps in the button row (bottom ~90px)
+        if (ty < 148) continue;
+
+        if (tx < tft.width() / 2)
+        {
+            // YES — colours are correct, save and proceed
+            Preferences prefs;
+            if (prefs.begin("display", false))
+            {
+                prefs.putBool("col_ok", true);
+                prefs.putBool("invert", currentInvert);
+                prefs.end();
+            }
+            tft.fillScreen(TFT_BLACK);
+            return;
+        }
+        else
+        {
+            // NO — toggle inversion and redraw so user can answer again
+            currentInvert = !currentInvert;
+            tft.invertDisplay(currentInvert);
+            drawColorCalibrationScreen();
+        }
+    }
+}
+
 struct FirmwareManifest
 {
     uint32_t buildNumber;
@@ -3363,6 +3465,17 @@ void setup()
     tft.setRotation(1);
     tft.setSwapBytes(true);
 
+    // Apply saved display inversion as early as possible to avoid a colour flash
+    {
+        Preferences prefs;
+        if (prefs.begin("display", true))
+        {
+            if (prefs.getBool("col_ok", false))
+                tft.invertDisplay(prefs.getBool("invert", false));
+            prefs.end();
+        }
+    }
+
     if (!SPIFFS.begin(true))
     {
         Serial.println("[SPIFFS] Mount failed");
@@ -3377,6 +3490,7 @@ void setup()
 
     randomSeed(micros());
     displaySplashScreen();
+    runColorCalibrationIfNeeded();
 
     clearSnapshotState();
     clearLiveState();
