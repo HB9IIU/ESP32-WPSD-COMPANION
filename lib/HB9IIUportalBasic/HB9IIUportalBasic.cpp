@@ -1,6 +1,7 @@
 #include "HB9IIUportalBasic.h"
 
 #include <WiFi.h>
+#include <WiFiMulti.h>
 #include <WiFiUdp.h>
 #include <WebServer.h>
 #include <DNSServer.h>
@@ -29,8 +30,9 @@ namespace HB9IIUPortal
     static int scanCount = 0;
     static bool inAPmode = false;
     static bool connected = false;
-    static bool s_credentialsExist = false; // true when NVS has ssid+pass (even if connection failed)
-    static volatile bool s_gotIp = false;  // set by ARDUINO_EVENT_WIFI_STA_GOT_IP callback
+    static bool s_credentialsExist = false; // true when NVS has any saved network (even if connection failed)
+
+    static constexpr int MAX_WIFI_SLOTS = 3;
 
     // Optional hostname for STA + mDNS
     static String g_hostname;
@@ -57,6 +59,7 @@ namespace HB9IIUPortal
     static void handleRootCaptivePortal();
     static void handleScanCaptivePortal();
     static void handleSaveCaptivePortal();
+    static void handleRestartCaptivePortal();
     static void printNetworkInfoAndMDNS();
     static void buildScanResultsCache();
     static bool testWiFiCredentials(const String &ssid, const String &password, uint16_t timeoutMs = 10000);
@@ -147,7 +150,7 @@ namespace HB9IIUPortal
     static bool tryToConnectSavedWiFi()
     {
         Serial.println("[HB9IIUPortal] Attempting to load saved WiFi credentials...");
-        s_credentialsExist = false; // reset on every call
+        s_credentialsExist = false;
 
         if (!prefs.begin("wifi", false))
         {
@@ -155,163 +158,112 @@ namespace HB9IIUPortal
             return false;
         }
 
-        if (!prefs.isKey("ssid") || !prefs.isKey("pass"))
+        // Migrate old single-network format (ssid/pass keys, no count key)
+        if (prefs.isKey("ssid") && !prefs.isKey("count"))
         {
-            Serial.println("⚠️ [HB9IIUPortal] No saved credentials found (keys missing).");
-            prefs.end();
-            return false;
+            Serial.println("[HB9IIUPortal] Migrating old single-network NVS format...");
+            String oldSsid = prefs.getString("ssid", "");
+            String oldPass = prefs.getString("pass", "");
+            prefs.remove("ssid");
+            prefs.remove("pass");
+            if (!oldSsid.isEmpty())
+            {
+                prefs.putString("ssid0", oldSsid);
+                prefs.putString("pass0", oldPass);
+                prefs.putInt("count", 1);
+            }
         }
 
-        String ssid = prefs.getString("ssid", "");
-        String pass = prefs.getString("pass", "");
-        // testing with wrong SSID
-        // ssid = "Kilimangaro";
+        int count = prefs.getInt("count", 0);
+        String ssids[MAX_WIFI_SLOTS];
+        String passes[MAX_WIFI_SLOTS];
+        for (int i = 0; i < count && i < MAX_WIFI_SLOTS; i++)
+        {
+            ssids[i] = prefs.getString(("ssid" + String(i)).c_str(), "");
+            passes[i] = prefs.getString(("pass" + String(i)).c_str(), "");
+        }
         prefs.end();
 
-        // If SSID looks like "NAME (-48 dBm)" from our own scan label, strip the suffix (extra safety)
-        int parenIndex = ssid.lastIndexOf('(');
-        if (parenIndex > 0 && ssid.endsWith(" dBm)"))
+        if (count == 0)
         {
-            ssid = ssid.substring(0, parenIndex);
-            ssid.trim();
-        }
-
-        if (ssid.isEmpty() || pass.isEmpty())
-        {
-            Serial.println("⚠️ [HB9IIUPortal] No saved credentials found (empty values).");
-            s_credentialsExist = false;
+            Serial.println("⚠️ [HB9IIUPortal] No saved credentials found.");
             return false;
         }
 
-        s_credentialsExist = true; // credentials loaded — even if connection fails, don't start portal
+        s_credentialsExist = true;
 
-        Serial.printf("[HB9IIUPortal] 📡 Found SSID: %s\n", ssid.c_str());
-        Serial.printf("[HB9IIUPortal] 🔐 Found Password: %s\n", pass.c_str());
-
-        Serial.printf("[HB9IIUPortal] 🔌 Connecting to WiFi: %s", ssid.c_str());
+        WiFiMulti wifiMulti;
+        for (int i = 0; i < count && i < MAX_WIFI_SLOTS; i++)
+        {
+            String ssid = ssids[i];
+            // Strip " (-xx dBm)" suffix added by our scan labels (safety)
+            int parenIdx = ssid.lastIndexOf('(');
+            if (parenIdx > 0 && ssid.endsWith(" dBm)")) { ssid = ssid.substring(0, parenIdx); ssid.trim(); }
+            if (ssid.isEmpty()) continue;
+            Serial.printf("[HB9IIUPortal] 📡 Registered network [%d]: %s\n", i, ssid.c_str());
+            wifiMulti.addAP(ssid.c_str(), passes[i].c_str());
+        }
 
         WiFi.mode(WIFI_STA);
-        delay(500); // let radio hardware stabilize after mode switch / disconnect(true)
+        delay(500);
+        if (g_hostname.length()) WiFi.setHostname(g_hostname.c_str());
 
-        // If a hostname was provided in begin(), apply it before connecting
-        if (g_hostname.length())
+        Serial.print("[HB9IIUPortal] 🔌 Scanning & connecting to best available network...");
+
+        // wifiMulti.run() scans, picks highest-RSSI known AP, connects with given timeout
+        uint8_t wlStatus = wifiMulti.run(15000);
+
+        if (wlStatus != WL_CONNECTED)
         {
-            WiFi.setHostname(g_hostname.c_str());
-        }
-
-        // Listen for the GOT_IP event — this fires AFTER DHCP has committed the
-        // default route into lwIP, which is the only reliable signal that sockets work.
-        // Polling WiFi.localIP() / gatewayIP() is NOT sufficient: those values can be
-        // non-zero (cached from the previous session) before the new DHCP completes.
-        s_gotIp = false;
-        wifi_event_id_t evId = WiFi.onEvent(
-            [](WiFiEvent_t) { s_gotIp = true; },
-            ARDUINO_EVENT_WIFI_STA_GOT_IP);
-
-        WiFi.begin(ssid.c_str(), pass.c_str());
-
-        // Wait up to ~15 s; print status code on change for diagnostics
-        uint8_t lastStatus = 255;
-        for (int i = 0; i < 50; ++i)
-        {
-            if (s_gotIp) break;
-
-            uint8_t s = WiFi.status();
-            if (s != lastStatus || i % 3 == 0)
-            {
-                const char *label = "UNKNOWN";
-                switch (s)
-                {
-                case WL_IDLE_STATUS:      label = "IDLE";          break;
-                case WL_NO_SSID_AVAIL:   label = "NO_SSID_AVAIL"; break;
-                case WL_SCAN_COMPLETED:  label = "SCAN_COMPLETED"; break;
-                case WL_CONNECTED:       label = "CONNECTED";      break;
-                case WL_CONNECT_FAILED:  label = "CONNECT_FAILED"; break;
-                case WL_CONNECTION_LOST: label = "CONNECT_LOST";   break;
-                case WL_DISCONNECTED:    label = "DISCONNECTED";   break;
-                }
-                Serial.printf(" [%d=%s]", s, label);
-                lastStatus = s;
-            }
-            else
-            {
-                Serial.print(".");
-            }
-            delay(300);
-        }
-
-        WiFi.removeEvent(evId);
-
-        if (!s_gotIp)
-        {
-            Serial.printf("\n❌ [HB9IIUPortal] Failed (no GOT_IP). Last status: %d\n", WiFi.status());
+            Serial.printf("\n❌ [HB9IIUPortal] Failed to connect. Status: %d\n", wlStatus);
             WiFi.disconnect(true, false);
+
+            tft.setRotation(1);
+            tft.fillScreen(TFT_BLACK);
+            tft.setTextDatum(MC_DATUM);
+            tft.setTextSize(1);
+            int xCenter = tft.width() / 2;
+            int y2      = tft.height() / 2;
+            tft.setTextFont(4);
+            tft.setTextColor(TFT_RED, TFT_BLACK);
+            tft.drawString("Could not connect to", xCenter, y2 - 40);
+            tft.setTextColor(TFT_WHITE, TFT_BLACK);
+            tft.drawString("any saved network", xCenter, y2);
+            tft.setTextFont(2);
+            tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+            tft.drawString("Retrying...", xCenter, y2 + 30);
+            tft.setTextColor(tft.color565(140, 140, 140), TFT_BLACK);
+            tft.drawString("Hold touchscreen 3s to factory reset", xCenter, y2 + 55);
+            delay(2000);
+            return false;
         }
-        else
+
+        Serial.printf("\n✅ [HB9IIUPortal] Connected to: %s  IP: %s — probing route...",
+                      WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
+
+        // Verify the default route is truly installed via TCP probe to 8.8.8.8:53
+        bool routeOk = false;
+        const IPAddress probeIP(8, 8, 8, 8);
+        for (int p = 0; p < 25 && !routeOk; p++)
         {
-            IPAddress gw = WiFi.gatewayIP();
-            Serial.printf("\n✅ [HB9IIUPortal] GOT_IP: %s  GW: %s — probing route...",
-                          WiFi.localIP().toString().c_str(), gw.toString().c_str());
-
-            // Verify the default route is truly installed by TCP-connecting to
-            // 8.8.8.8:53.  ENETUNREACH fires in <1ms when the route is missing;
-            // a real connection (or any other errno) means the route is up.
-            // Print errno so we can see what the probe is actually getting.
-            bool routeOk = false;
-            const IPAddress probeIP(8, 8, 8, 8);
-            for (int p = 0; p < 25 && !routeOk; p++)
-            {
-                WiFiClient c;
-                bool connected = c.connect(probeIP, 53, 2000);
-                int e = errno;
-                c.stop();
-                Serial.printf("[probe %d] connected=%d errno=%d\n", p, (int)connected, e);
-                // Only accept an actual TCP connection as proof — timeout is ambiguous
-                routeOk = connected;
-                if (!routeOk) delay(100);
-            }
-
-            if (!routeOk)
-            {
-                Serial.println("⚠️ [HB9IIUPortal] Route probe failed — retrying WiFi.");
-                WiFi.disconnect(true, false);
-                return false;
-            }
-
-            Serial.println(" OK");
-            return true;
+            WiFiClient c;
+            bool ok = c.connect(probeIP, 53, 2000);
+            int e = errno;
+            c.stop();
+            Serial.printf("[probe %d] connected=%d errno=%d\n", p, (int)ok, e);
+            routeOk = ok;
+            if (!routeOk) delay(100);
         }
 
-        // --- Show failed connection message; caller will retry ---
-        tft.setRotation(1);
-        tft.fillScreen(TFT_BLACK);
-        tft.setTextDatum(MC_DATUM);
-        tft.setTextSize(1);
+        if (!routeOk)
+        {
+            Serial.println("⚠️ [HB9IIUPortal] Route probe failed — retrying WiFi.");
+            WiFi.disconnect(true, false);
+            return false;
+        }
 
-        int xCenter = tft.width() / 2;
-        int y1 = tft.height() / 2 - 40;
-        int y2 = tft.height() / 2;
-
-        // Line 1: error (Font 4, red)
-        tft.setTextFont(4);
-        tft.setTextColor(TFT_RED, TFT_BLACK);
-        tft.drawString("Could not connect to", xCenter, y1);
-
-        // Line 2: SSID (Font 4, white)
-        tft.setTextColor(TFT_WHITE, TFT_BLACK);
-        tft.drawString(ssid, xCenter, y2);
-
-        // Line 3: retrying (Font 2, yellow)
-        tft.setTextFont(2);
-        tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-        tft.drawString("Retrying...", xCenter, y2 + 30);
-
-        // Line 4: factory reset hint (Font 2, grey)
-        tft.setTextColor(tft.color565(140, 140, 140), TFT_BLACK);
-        tft.drawString("Hold touchscreen 3s to factory reset", xCenter, y2 + 55);
-
-        delay(2000);
-        return false;
+        Serial.println(" OK");
+        return true;
     }
 
     // NEW: QR drawing helper
@@ -409,8 +361,9 @@ namespace HB9IIUPortal
         server.on("/fwlink", handleRootCaptivePortal);              // Windows
         server.on("/hotspot-detect.html", handleRootCaptivePortal); // Apple
 
-        server.on("/scan", handleScanCaptivePortal);
-        server.on("/save", HTTP_POST, handleSaveCaptivePortal);
+        server.on("/scan",    handleScanCaptivePortal);
+        server.on("/save",    HTTP_POST, handleSaveCaptivePortal);
+        server.on("/restart", handleRestartCaptivePortal);
 
         server.begin();
         Serial.println("✅ [HB9IIUPortal] Web server started. Connect to 'WPSD-Setup' Wi-Fi.");
@@ -509,85 +462,66 @@ namespace HB9IIUPortal
     {
         Serial.println("💾 [HB9IIUPortal] Processing Wi-Fi credentials save request...");
 
-        // Raw form values
         String ssidLabel = server.arg("ssid");
-        String password = server.arg("password");
-        String timeStr = server.hasArg("time") ? server.arg("time") : "";
+        String password  = server.arg("password");
+        String timeStr   = server.hasArg("time") ? server.arg("time") : "";
 
-        // Strip " (… dBm)" to get the real SSID from label
+        // Strip " (… dBm)" to get the real SSID from the scan label
         String ssid = ssidLabel;
         int parenIndex = ssid.indexOf(" (");
-        if (parenIndex > 0)
+        if (parenIndex > 0) { ssid = ssid.substring(0, parenIndex); ssid.trim(); }
+
+        Serial.printf("📝 [HB9IIUPortal] SSID: '%s'  Password: '%s'\n", ssid.c_str(), password.c_str());
+
+        // 1) Test credentials before saving
+        if (!testWiFiCredentials(ssid, password, 10000))
         {
-            ssid = ssid.substring(0, parenIndex);
-            ssid.trim();
-        }
-
-        Serial.printf("📝 [HB9IIUPortal] Received SSID label: '%s'\n", ssidLabel.c_str());
-        Serial.printf("📝 [HB9IIUPortal] Using raw SSID: '%s'\n", ssid.c_str());
-        Serial.printf("📝 [HB9IIUPortal] Received Password: '%s'\n", password.c_str());
-        Serial.printf("🕒 [HB9IIUPortal] Received Time: '%s'\n", timeStr.c_str());
-
-        // 1) Test the credentials BEFORE saving/restarting, using the RAW SSID
-        if (!testWiFiCredentials(ssid, password, 10000)) // 10s timeout
-        {
-            Serial.println("❌ [HB9IIUPortal] Entered Wi-Fi credentials do NOT work. Staying in portal.");
-
-            // Show the existing HTML error page
+            Serial.println("❌ [HB9IIUPortal] Credentials do not work. Staying in portal.");
             server.send(200, "text/html", html_error);
-            return; // IMPORTANT: do not save or restart
+            return;
         }
 
-        // If we reach here, credentials worked at least once 👍
-
-        // 2) Save Wi-Fi credentials in prefs namespace "wifi"
+        // 2) Save to the next available slot (wraps at MAX_WIFI_SLOTS)
         if (prefs.begin("wifi", false))
         {
-            prefs.putString("ssid", ssid); // save cleaned SSID
-            prefs.putString("pass", password);
+            int currentCount = prefs.getInt("count", 0);
+            int slot         = currentCount % MAX_WIFI_SLOTS;
+            int newCount     = (currentCount < MAX_WIFI_SLOTS) ? currentCount + 1 : MAX_WIFI_SLOTS;
+
+            prefs.putString(("ssid" + String(slot)).c_str(), ssid);
+            prefs.putString(("pass" + String(slot)).c_str(), password);
+            prefs.putInt("count", newCount);
             prefs.end();
-            Serial.println("✅ [HB9IIUPortal] Wi-Fi credentials saved to NVS (namespace 'wifi').");
+
+            Serial.printf("✅ [HB9IIUPortal] Network saved to slot %d (total: %d).\n", slot, newCount);
         }
         else
         {
-            Serial.println("❌ [HB9IIUPortal] Failed to open prefs namespace 'wifi' for writing.");
+            Serial.println("❌ [HB9IIUPortal] Failed to open NVS namespace 'wifi' for writing.");
         }
 
-        // 3) Optional: parse and save iPhone time JSON (if provided)
+        // 3) Save iPhone time if provided
         if (timeStr.length() > 0)
         {
             JsonDocument timeDoc;
             DeserializationError err = deserializeJson(timeDoc, timeStr);
-
             if (!err)
             {
-                // HTML sends: {iso: isoTime, unix: unixMillis, offset: offsetMinutes}
-                const char *isoTime = timeDoc["iso"]; // e.g. "2025-11-22T10:15:30Z"
-                int64_t unixMillis = timeDoc["unix"] | 0;
-                int offsetMins = timeDoc["offset"] | 0;
-
-                Serial.printf("🕒 Parsed time JSON:\n   isoTime: %s\n   unixMillis: %lld\n   offsetMinutes: %d\n",
-                              isoTime ? isoTime : "(null)",
-                              unixMillis,
-                              offsetMins);
-
+                const char *isoTime  = timeDoc["iso"];
+                int64_t unixMillis   = timeDoc["unix"] | 0;
+                int     offsetMins   = timeDoc["offset"] | 0;
+                Serial.printf("🕒 Time: %s  unix: %lld  offset: %d\n",
+                              isoTime ? isoTime : "(null)", unixMillis, offsetMins);
                 if (prefs.begin("iPhonetime", false))
                 {
                     prefs.putString("localTime", isoTime ? isoTime : "");
                     prefs.putLong64("unixMillis", unixMillis);
                     prefs.putInt("offsetMinutes", offsetMins);
                     prefs.end();
-
-                    Serial.println("✅ [HB9IIUPortal] iPhone time JSON saved to NVS (namespace 'iPhonetime').");
-                }
-                else
-                {
-                    Serial.println("❌ [HB9IIUPortal] Failed to open prefs namespace 'iPhonetime' for writing.");
                 }
             }
             else
             {
-                Serial.println("⚠️ [HB9IIUPortal] Failed to parse time JSON, saving raw string instead.");
                 if (prefs.begin("iPhonetime", false))
                 {
                     prefs.putString("localTime", timeStr);
@@ -596,9 +530,14 @@ namespace HB9IIUPortal
             }
         }
 
-        // 4) Show success page and reboot as before
+        // 4) Show success page — user chooses to add another or restart
         server.send_P(200, "text/html", html_success);
-        delay(500);
+    }
+
+    static void handleRestartCaptivePortal()
+    {
+        server.send(200, "text/plain", "Restarting device...");
+        delay(300);
         ESP.restart();
     }
 
