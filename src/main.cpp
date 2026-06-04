@@ -1082,6 +1082,116 @@ static void drawColorCalibrationScreen()
     tft.setTextDatum(TL_DATUM);
 }
 
+static void drawRotationCalibrationScreen()
+{
+    const int W = tft.width();
+    const int H = tft.height();
+
+    tft.fillScreen(TFT_BLACK);
+
+    // Title bar
+    tft.fillRect(0, 0, W, 30, tft.color565(30, 30, 30));
+    tft.setTextDatum(MC_DATUM);
+    tft.setFreeFont(&RobotoCondensedBold12px7b);
+    tft.setTextColor(TFT_WHITE, tft.color565(30, 30, 30));
+    tft.drawString("SCREEN ORIENTATION", W / 2, 15);
+
+    // Arrow head (triangle pointing UP in tft coords)
+    tft.fillTriangle(W / 2, 45, W / 2 - 38, 105, W / 2 + 38, 105, TFT_YELLOW);
+    // Arrow stem
+    tft.fillRect(W / 2 - 14, 105, 28, 50, TFT_YELLOW);
+
+    // Instructions
+    tft.setFreeFont(&RobotoCondensedBold12px7b);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.drawString("Arrow pointing UP?", W / 2, 173);
+
+    tft.setFreeFont(&RobotoCondensedRegular10px7b);
+    tft.setTextColor(tft.color565(180, 180, 180), TFT_BLACK);
+    tft.drawString("HOLD anywhere to confirm", W / 2, 193);
+    tft.drawString("TAP anywhere to flip 180 degrees", W / 2, 210);
+
+    // Progress bar outline (fills during long press)
+    tft.drawRect(19, 224, W - 38, 10, tft.color565(80, 80, 80));
+
+    tft.setFreeFont(nullptr);
+    tft.setTextDatum(TL_DATUM);
+}
+
+static void runRotationCalibrationIfNeeded()
+{
+    {
+        Preferences prefs;
+        if (prefs.begin("display", true))
+        {
+            bool confirmed = prefs.getBool("rot_ok", false);
+            int  rotation  = prefs.getInt("rotation", 1);
+            prefs.end();
+            if (confirmed)
+            {
+                tft.setRotation(rotation);
+                touchscreen.setRotation(rotation);
+                return;
+            }
+        }
+    }
+
+    int currentRotation = 1;
+    tft.setRotation(1);
+    touchscreen.setRotation(1);
+    drawRotationCalibrationScreen();
+
+    while (true)
+    {
+        // Wait for touch
+        while (!(touchscreen.tirqTouched() && touchscreen.touched())) {}
+
+        unsigned long touchStart = millis();
+        const int barX = 20;
+        const int barY = 225;
+        const int barW = tft.width() - 40;
+        const int barH = 8;
+        bool confirmed = false;
+
+        while (touchscreen.touched())
+        {
+            unsigned long elapsed = millis() - touchStart;
+            if (elapsed >= 1000)
+            {
+                confirmed = true;
+                break;
+            }
+            // Animate progress bar
+            int fill = (int)((elapsed * barW) / 1000);
+            tft.fillRect(barX, barY, fill, barH, TFT_GREEN);
+            delay(20);
+        }
+
+        // Clear progress bar
+        tft.fillRect(barX, barY, barW, barH, TFT_BLACK);
+        tft.drawRect(19, 224, barW + 2, 10, tft.color565(80, 80, 80));
+
+        if (confirmed)
+        {
+            Preferences prefs;
+            if (prefs.begin("display", false))
+            {
+                prefs.putBool("rot_ok", true);
+                prefs.putInt("rotation", currentRotation);
+                prefs.end();
+            }
+            tft.fillScreen(TFT_BLACK);
+            return;
+        }
+
+        // Short tap — flip 180 degrees
+        currentRotation = (currentRotation == 1) ? 3 : 1;
+        tft.setRotation(currentRotation);
+        touchscreen.setRotation(currentRotation);
+        drawRotationCalibrationScreen();
+    }
+}
+
 static void runColorCalibrationIfNeeded()
 {
     {
@@ -3467,13 +3577,19 @@ void setup()
     tft.setRotation(1);
     tft.setSwapBytes(true);
 
-    // Apply saved display inversion as early as possible to avoid a colour flash
+    // Apply saved display settings (inversion + rotation) before any drawing
     {
         Preferences prefs;
         if (prefs.begin("display", true))
         {
             if (prefs.getBool("col_ok", false))
                 tft.invertDisplay(prefs.getBool("invert", false));
+            if (prefs.getBool("rot_ok", false))
+            {
+                int rot = prefs.getInt("rotation", 1);
+                tft.setRotation(rot);
+                touchscreen.setRotation(rot);
+            }
             prefs.end();
         }
     }
@@ -3493,6 +3609,7 @@ void setup()
     randomSeed(micros());
     displaySplashScreen();
     runColorCalibrationIfNeeded();
+    runRotationCalibrationIfNeeded();
 
     clearSnapshotState();
     clearLiveState();
