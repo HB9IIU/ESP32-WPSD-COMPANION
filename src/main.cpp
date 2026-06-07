@@ -278,8 +278,11 @@ void copyJsonString(JsonVariantConst value, char *destination, size_t destinatio
         return;
     }
 
-    String text = value.as<String>();
-    strlcpy(destination, text.c_str(), destinationSize);
+    const char *str = value.as<const char *>();
+    if (str != nullptr)
+        strlcpy(destination, str, destinationSize);
+    else
+        destination[0] = '\0';
 }
 
 void printDivider(const char *title)
@@ -710,6 +713,7 @@ void parseSnapshot(JsonDocument &doc)
     }
 
     printSnapshot(doc["config"]);
+    yield(); // watchdog feed after large serial dump
 }
 
 void parseLive(JsonDocument &doc)
@@ -969,6 +973,8 @@ void onWsEvent(WStype_t type, uint8_t *payload, size_t length)
             parseLive(doc);
         else if (strcmp(t, "heard_summary") == 0)
             parseHeardSummary(doc);
+        else
+            Serial.printf("[WS] Unknown type: %s\n", t);
         break;
     }
     default:
@@ -1858,10 +1864,12 @@ void updateRxFlagDisplay()
     if (g_live.valid && liveCallsignIsActive() && looksLikeCountryCode(g_live.source_country_code))
     {
         displayContryMapLarge(g_live.source_country_code, flagX, flagY);
+        yield();
         return;
     }
 
     displayIdleLargeIcon(flagX, flagY);
+    yield();
 }
 
 void drawRxNameText(const char *name, uint16_t textColor)
@@ -2526,6 +2534,7 @@ void updateRecentHeardFlagsDisplay()
         {
             displayBlankSmallFlag(x, y);
         }
+        yield(); // feed task watchdog between JPEG renders
     }
 }
 

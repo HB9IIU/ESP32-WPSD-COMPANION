@@ -1315,7 +1315,7 @@ async def main():
 
     try:
         async with websockets.serve(ws_handler, WS_BIND_HOST, WS_BIND_PORT,
-                                    ping_interval=None):  # ESP32 heartbeat handles keepalive
+                                    ping_interval=20, ping_timeout=20):
             await monitor_log_forever()
     finally:
         refresh_task.cancel()
