@@ -1166,7 +1166,7 @@ def refresh_bm_static_tgs():
 async def bm_static_tg_refresh_loop():
     while True:
         try:
-            refresh_bm_static_tgs()
+            await asyncio.to_thread(refresh_bm_static_tgs)
             await broadcast_snapshot_state()
         except Exception as exc:
             print("Warning: BM static TG refresh failed: %s" % exc)
@@ -1177,7 +1177,7 @@ async def radioid_refresh_loop():
     while True:
         try:
             if radioid_csv_is_stale():
-                refresh_radioid_database(download_if_needed=True)
+                await asyncio.to_thread(refresh_radioid_database, True)
                 rebuild_snapshot_state()
                 await broadcast_snapshot_state()
         except Exception as e:
