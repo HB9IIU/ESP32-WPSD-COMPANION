@@ -989,7 +989,10 @@ def update_live_state_from_log_line(log_line):
 # ---------------------------------------------------------------------
 
 async def send_json(websocket, payload):
-    await websocket.send(json.dumps(payload, separators=(",", ":")))
+    await asyncio.wait_for(
+        websocket.send(json.dumps(payload, separators=(",", ":"))),
+        timeout=10.0
+    )
 
 
 def build_snapshot_payload():
